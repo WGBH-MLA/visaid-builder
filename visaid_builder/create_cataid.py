@@ -43,6 +43,7 @@ except ImportError as e:
     print("Warning: `gbh_ai_helper` package not found.  Will not use.")
     _GBH_AI_HELPER = False
 
+GBH_AI_DEPLOYMENT_ALIAS = "DEPLOY_GPT41MINI"
 
 CATAID_DEFAULTS = { "deselected_scene_types": ["filmed text"],
                     "job_id_in_cataid_filename": False,
@@ -90,7 +91,9 @@ def catify_text( raw_text:str,
         try:
             new_text = ai.analyze_sample( scene_prompts[tf_label], 
                                           raw_text,
-                                          system_prompt=system_prompt )
+                                          system_prompt=system_prompt,
+                                          max_tokens=100,
+                                          deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
         except Exception as e:
             print("Warning: AI helper failed for `raw text`:")
             print(raw_text)
@@ -463,7 +466,7 @@ def create_cataid( video_path:str,
                              '</span>' )
         html_aid_itemcap = ( '<span class="item-top">' + 
                              '<span class="label">extracted text</span>' + 
-                             f'<span class="engage-toggle label clickable" data-rid="{edit_row_id}">&nbsp; &#9703; </span>' + 
+                             f'<span class="engage-toggle label clickable" data-rid="{edit_row_id}">&nbsp;&nbsp;&#9703;</span>' + 
                              '</span>' )
         html_edt_itemcap = ( '<span class="item-top">' + 
                              '<span class="label">catalog data</span>' + 
