@@ -171,7 +171,7 @@ def create_visaid( video_path:str,
                     #while ftime+15 >= target_time :
                     
                     # Look for first frame after the target
-                    while ftime >= target_time :
+                    while ftime >= target_time and next_scene < len(tfs_s):
 
                         # Check for anamorphic and stretch if necessary
                         if stretch:
@@ -206,11 +206,11 @@ def create_visaid( video_path:str,
                         tfsi.append(tfs_s[next_scene] + [ ftime ] + [ img_str ] )
                         
                         next_scene += 1
-                        if next_scene >= len(tfs_s):            
+                        if next_scene < len(tfs_s):
+                            target_time = tfs_s[next_scene][4]
+                        else:
                             # no need to continue decoding video if we have all our scenes saved
                             break
-                        else:
-                            target_time = tfs_s[next_scene][4]
 
             except av.error.InvalidDataError as e:
                 # This exception may get raised many times if there are many packets with problems

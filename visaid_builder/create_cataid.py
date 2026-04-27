@@ -234,7 +234,7 @@ def create_cataid( video_path:str,
         # particular decode step.  This main loop originally iterated over frames in
         # `container.decode(video_stream)`.
         for packet in container.demux(video_stream):
-            #break # TESTING 
+            
             try:
                 for frame in packet.decode():
                     ftime = int(frame.time * 1000)   
@@ -246,7 +246,7 @@ def create_cataid( video_path:str,
                     #while ftime+15 >= target_time :
                     
                     # Look for first frame after the target
-                    while ftime >= target_time :
+                    while ftime >= target_time and next_scene < len(tfsd_s) :
                         
                         # Check for anamorphic and stretch if necessary
                         if stretch:
@@ -284,11 +284,12 @@ def create_cataid( video_path:str,
                         tfsdi.append(new_tf)
                         
                         next_scene += 1
-                        if next_scene >= len(tfsd_s):            
+                        if next_scene < len(tfsd_s):            
+                            target_time = tfsd_s[next_scene]["tp_time"]                            
+                        else:
                             # no need to continue decoding video if we have all our scenes saved
                             break
-                        else:
-                            target_time = tfsd_s[next_scene]["tp_time"]
+
 
             except av.error.InvalidDataError as e:
                 # This exception may get raised many times if there are many packets with problems
@@ -303,6 +304,7 @@ def create_cataid( video_path:str,
 
             if next_scene >= len(tfsd_s):
                 # no need to continue decoding video if we have all our scenes saved
+                target_time = -1
                 break
 
     # Done with the video media itself
