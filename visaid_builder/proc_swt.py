@@ -128,7 +128,7 @@ def get_td_view_id(usemmif:Mmif):
 def get_mmif_metadata_str( usemmif:Mmif, 
                            tp_view_id:str, 
                            tf_view_id:str,
-                           td_view_id:str ):
+                           td_view_id:str=None):
     """
     Takes the metadata object from the view(s) specified.    
     Returns prettified serialized JSON for that metadata.
