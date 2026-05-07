@@ -131,9 +131,9 @@ function collectEdits () {
         editorItem["tf_label"] = itemEl.dataset["scenetype"];
         const rid = parseInt(itemEl.dataset["rid"]);        
 
-        const edtEl = document.querySelector(`.editor-text[data-rid='${rid}']`);
-        editorItem["etd_text"] = edtEl.textContent.trim();        
-        editorItem["tp_id"] = edtEl.dataset["tpid"];
+        const etdEl = document.querySelector(`.editor-text[data-rid='${rid}']`);
+        editorItem["etd_text"] = etdEl.textContent.trim();        
+        editorItem["tp_id"] = etdEl.dataset["tpid"];
 
         const aidEl = document.querySelector(`.aid-text[data-rid='${rid}']`);
         editorItem["aid_text"] = aidEl.textContent.trimEnd();                

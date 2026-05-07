@@ -22,11 +22,29 @@ def tablify_catouts( paths:list ) -> list:
     Takes a list of filepaths to catout JSON files.
 
     Returns a table (list of dictionaries) with all target output fields.
+    (Each list item corresponds to a single catout entry, allowing multiple 
+     catout entries per frame if `+++` multiplexing is found.)
 
     This function operates at the aggregate level over lots of catouts.  
-    
-    It operates only at the level of explicit data structures.  Parsing of human-entered
-    data happens separately.
+
+    This function works only at the level of explicit structure.  It calls
+    a parsing function to interpret implicit structure.    
+
+    Each list item is a dictionary with the following dkeys
+
+    "asset_id"                - string: Asset ID
+    "cataid_id"               - string: Cataid ID
+    "cataid_ver"              - string: Cataid version string
+    "cataloger"               - string: cataloger initials or name
+    "export_date"             - string: ISO date
+    "tp_time"                 - int:    time in milliseconds
+    "tf_label"                - string: SWT scene label
+    "tp_id"                   - string: MMIF TimePoint identifier
+    "img_fname"               - string: KSL-style filename for the still image
+    "img_data_uri"            - string: Base64 encoded image beginning "data:image/jpeg;base64,"
+    "aid_text"                - string: Extracted text as appearing on cataid
+    "etd_text"                - string: Edited text document from user
+    "etd_data":               - dictionary   
     """
 
     catout_table = []
@@ -53,23 +71,23 @@ def tablify_catouts( paths:list ) -> list:
 
                 etd_recs = parse_etd( ei["etd_text"] )
 
-                # it is possible to have multiple records for a single editor_item
+                # it is possible to have multiple etd records for a single editor_item
                 for etd_rec in etd_recs:
                     r = {}
 
-                    r["asset_id"] = catoutd["asset_id"]
-                    r["cataid_id"] = catoutd["cataid_id"]
-                    r["cataid_ver"] = catoutd["cataid_ver"]
-                    r["cataloger"] = catoutd["cataloger"]
-                    r["export_date"] = catoutd["export_date"].split("T")[0]
-                    r["tp_time"] = ei["tp_time"]
-                    r["tf_label"] = ei["tf_label"]
-                    r["tp_id"] = ei["tp_id"]
-                    r["img_fname"] = ei["img_fname"]
-                    r["aid_text"] = ei["aid_text"]
-                    r["etd_text"] = ei["etd_text"]
+                    r["asset_id"]     = catoutd["asset_id"]
+                    r["cataid_id"]    = catoutd["cataid_id"]
+                    r["cataid_ver"]   = catoutd["cataid_ver"]
+                    r["cataloger"]    = catoutd["cataloger"]
+                    r["export_date"]  = catoutd["export_date"].split("T")[0]
+                    r["tp_time"]      = int(ei["tp_time"])
+                    r["tf_label"]     = ei["tf_label"]
+                    r["tp_id"]        = ei["tp_id"]
+                    r["img_fname"]    = ei["img_fname"]
+                    r["aid_text"]     = ei["aid_text"]
+                    r["etd_text"]     = ei["etd_text"]
 
-                    r["etd_data"] = etd_rec
+                    r["etd_data"]     = etd_rec
 
                     r["img_data_uri"] = ei["img_data_uri"]
 
@@ -84,11 +102,19 @@ def tablify_catouts( paths:list ) -> list:
 def parse_etd( etd_text:str ) -> list:
     """
     Parsing logic of human edited/entered values.
-    Takes a string of raw text and returns a list of dictionaries.
+    Takes a string of raw text as input.
+    Returns a list of dictionaries.
+
+    Typically, the returned list has just a single dictionary, but if the 
+    user has used the "+++" syntax to multiplex the editor, there may be more
+    than one.
+
+    This function divides muliplexed editor text, uses a heuristic to choose
+    the appropriate parsing, and then calls the appropriate parsing function.
     """
 
     # allow multiple records per etd text
-    edt_recs = []
+    etd_recs = []
 
     # divide multiplexed editor text and strip surrounding whitespace
     etd_secs = [ s.strip() for s in etd_text.split("\n+++") if s.strip() ]
@@ -111,9 +137,9 @@ def parse_etd( etd_text:str ) -> list:
             # other etd value
             r = parse_sec_other(sec)
 
-        edt_recs.append(r)
+        etd_recs.append(r)
 
-    return edt_recs
+    return etd_recs
 
 
 
@@ -236,6 +262,7 @@ def parse_catears ( lines:list ) -> dict:
     return d
 
 
+############################################################################
 
 def main():
 
@@ -290,6 +317,7 @@ def main():
     # De-duplicate and sort for a clean list
     catout_paths = sorted(list(set(catout_paths)))
 
+    # Create the quasi-tabular structure
     if catout_paths:
         catout_table = tablify_catouts( catout_paths )
     else:
@@ -306,7 +334,7 @@ def main():
     elif args.type == "html-key":
         out_str = catout_tables.make_keyed_data_table(catout_table)
     elif args.type[:7] == "csv-con":
-        out_str = catout_ingests.make_contrib_ingest(catout_table)
+        out_str = catout_ingests.make_basic_contrib_ingest(catout_table)
 
     if args.output:
         out_fname = args.output

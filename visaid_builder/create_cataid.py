@@ -470,7 +470,7 @@ def create_cataid( video_path:str,
                              '<span class="label">extracted text</span>' + 
                              f'<span class="engage-toggle label clickable" data-rid="{edit_row_id}">&nbsp;&nbsp;&#9703;</span>' + 
                              '</span>' )
-        html_edt_itemcap = ( '<span class="item-top">' + 
+        html_etd_itemcap = ( '<span class="item-top">' + 
                              '<span class="label">catalog data</span>' + 
                              '<span class="label invisible">&nbsp; &#9703; </span>' + 
                              '</span>' )
@@ -534,8 +534,8 @@ def create_cataid( video_path:str,
                              "</pre>" + "\n" + 
                              "</div>" + "\n" )
 
-        html_itemedt_div = ( f"<div class='{item_div_class} item-editor' data-tptime='{tp_time}' data-scenetype='{scenetype}' data-rid='{edit_row_id}'>" + "\n" +
-                             html_edt_itemcap + "\n" +
+        html_itemetd_div = ( f"<div class='{item_div_class} item-editor' data-tptime='{tp_time}' data-scenetype='{scenetype}' data-rid='{edit_row_id}'>" + "\n" +
+                             html_etd_itemcap + "\n" +
                              f"<pre class='editor-text' contenteditable='true' data-rid='{edit_row_id}' data-tpid='{tp_id}'>" + "\n" +
                              editor_text + "\n" +
                              "</pre>" + "\n" + 
@@ -546,7 +546,7 @@ def create_cataid( video_path:str,
                          html_itemvis_div + "\n" +
                          "<div class='cataid-extra'>" + "\n\n" +
                          html_itemaid_div + "\n" +
-                         html_itemedt_div + "\n" +
+                         html_itemetd_div + "\n" +
                          "</div><!-- end of cataid portions-->" + "\n" +
                          "</div>" + "\n" + 
                          "<!-- end of itemrow-->" + "\n\n\n" )
