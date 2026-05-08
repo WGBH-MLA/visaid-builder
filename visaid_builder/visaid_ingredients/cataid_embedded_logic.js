@@ -132,11 +132,11 @@ function collectEdits () {
         const rid = parseInt(itemEl.dataset["rid"]);        
 
         const etdEl = document.querySelector(`.editor-text[data-rid='${rid}']`);
-        editorItem["etd_text"] = etdEl.textContent.trim();        
+        editorItem["etd_text"] = etdEl.innerText.trim();        
         editorItem["tp_id"] = etdEl.dataset["tpid"];
 
         const aidEl = document.querySelector(`.aid-text[data-rid='${rid}']`);
-        editorItem["aid_text"] = aidEl.textContent.trimEnd();                
+        editorItem["aid_text"] = aidEl.innerText.trimEnd();                
 
         const fnameEl = document.querySelector(`.img-fname[data-rid='${rid}']`);
         editorItem["img_fname"] = fnameEl.textContent.trim();
