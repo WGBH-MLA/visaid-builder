@@ -78,6 +78,13 @@ def parse_sec_empty( sec: str, asset_id:str = None ) -> dict:
 
     rec_invalid_sec(l, asset_id, msg="Empty etd section")
 
+    r = {}
+    r["problem"] = True
+    r["etd_type"] = "empty"
+    r["chyron_data"] = {}
+    r["keyed_data"] = {}
+    r["catear_data"] = {}
+
     return None
 
 
@@ -86,6 +93,8 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
     """
     Parse as keyed/bullet list of values.
     """
+
+    problem = False
 
     # get the non-empty lines
     lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
@@ -104,6 +113,7 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
 
     if bad_lines or not key_lines:
         rec_invalid_sec(sec, asset_id, "Invalid keyed information")
+        problem = True
 
     # dictionary of keyed data
     keyed_data = {}
@@ -111,10 +121,19 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
         k = l[1:l.find(":")].strip()
         v = l[l.find(":")+1:].strip()
 
+        if k not in catout_vocab.VALID_KEYS:
+            rec_invalid_sec(sec, asset_id, "Invalid key")
+            problem = True
+
+        if v.find("*") != -1:
+            rec_invalid_sec(sec, asset_id, "Value contains asterisk")
+            problem = True
+
         # Keys are repeatable.  Accumulate a list of values.
         keyed_data.setdefault(k, []).append(v)
 
     r = {}
+    r["problem"] = problem
     r["etd_type"] = "keyed"
     r["chyron_data"] = {}
     r["keyed_data"] = keyed_data
@@ -128,6 +147,7 @@ def parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
     Parse as chyron data.
     (i.e., KSL Chyron note-4 conventions)
     """
+    problem = False
 
     # get the non-empty lines
     lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
@@ -148,7 +168,17 @@ def parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
     else:
         chyron_data["person_attributes"] = ""
 
+    for k in ["name_as_written", "name_normalized", "person_attributes" ]:
+        if chyron_data[k].find("^^") != -1:
+            rec_invalid_sec(sec, asset_id, "Catears in chyron data")
+            problem = True
+    
+    if len(chyron_data["name_normalized"]) > len(chyron_data["name_as_written"]) + 2:
+        rec_invalid_sec(sec, asset_id, "Normalized name suspiciously long")
+        problem = True
+
     r = {}
+    r["problem"] = problem
     r["etd_type"] = "chyron"
     r["chyron_data"] = chyron_data
     r["keyed_data"] = {}
@@ -159,6 +189,8 @@ def parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
 
 def parse_sec_ears_only( sec: str, asset_id:str = None ) -> dict:
 
+    problem = False
+
     # get the non-empty lines
     lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
 
@@ -168,9 +200,11 @@ def parse_sec_ears_only( sec: str, asset_id:str = None ) -> dict:
 
     if bad_lines:
         rec_invalid_sec(sec, asset_id, "Cat ears but then extra")
+        problem = True
 
 
     r = {}
+    r["problem"] = problem
     r["etd_type"] = "catears-only"
     r["chyron_data"] = {}
     r["keyed_data"] = {}
@@ -182,12 +216,14 @@ def parse_sec_ears_only( sec: str, asset_id:str = None ) -> dict:
 def parse_sec_other( sec: str, asset_id:str = None ) -> dict:
 
     # this kind of etd is invalid.
-    rec_invalid_sec(sec, asset_id)
+    rec_invalid_sec(sec, asset_id, "Invalid section")
+    problem = True
 
     lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
     ears_lines = [ l for l in lines if l[:2] == "^^" ]
 
     r = {}
+    r["problem"] = problem
     r["etd_type"] = "other"
     r["chyron_data"] = {}
     r["keyed_data"] = {}
@@ -244,6 +280,8 @@ def parse_catears ( lines:list, asset_id:str = None ) -> dict:
 
             if not invalid_catear:
                 d[k] = v
+            else:
+                d["_problem"] = True
 
     return d
 

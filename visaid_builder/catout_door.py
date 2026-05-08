@@ -168,6 +168,8 @@ def main():
         out_str = catout_tables.make_exp_table(catout_table)
     elif args.type == "html-key":
         out_str = catout_tables.make_keyed_data_table(catout_table)
+    elif args.type == "html-prob":
+        out_str = catout_tables.make_prob_table(catout_table)
     elif args.type[:7] == "csv-con":
         out_str = catout_ingests.make_basic_contrib_ingest(catout_table)
 
