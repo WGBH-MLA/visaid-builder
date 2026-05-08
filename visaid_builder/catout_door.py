@@ -70,7 +70,7 @@ def tablify_catouts( paths:list ) -> list:
             new_rows = []
             for ei in catoutd["editor_items"]:
 
-                etd_recs = catout_parse_etd.parse_etd( ei["etd_text"] )
+                etd_recs = catout_parse_etd.parse_etd( ei["etd_text"], catoutd["asset_id"] )
 
                 # it is possible to have multiple etd records for a single editor_item
                 for etd_rec in etd_recs:
@@ -180,7 +180,7 @@ def main():
         elif args.type[:3] == "csv":
             ext = ".csv"
         else:
-            ext = "txt"
+            ext = ".txt"
         out_fname = base + ext
 
     if out_str:
