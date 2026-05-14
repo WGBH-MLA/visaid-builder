@@ -99,6 +99,7 @@ def get_swt_view_ids(usemmif:Mmif):
     return (tp_view_id, tf_view_id)
 
 
+
 def get_td_view_id(usemmif:Mmif):
     """
     Takes a MMIF string and returns the ID of a view with TextDocument annotations
@@ -123,6 +124,7 @@ def get_td_view_id(usemmif:Mmif):
         td_view_id= None
 
     return td_view_id
+
 
 
 def get_mmif_metadata_str( usemmif:Mmif, 
@@ -224,6 +226,7 @@ def first_final_time_in_mmif( usemmif:Mmif, tp_view_id:str ):
     return first_time, final_time
 
 
+
 def tfsd_from_mmif( usemmif:Mmif, 
                     tp_view_id:str, 
                     tf_view_id:str,
@@ -252,10 +255,12 @@ def tfsd_from_mmif( usemmif:Mmif,
       (-) "text":     text from the TextDocument
     """
 
+    # Start with an empty list of TimeFrame annotations
+    tfsd = []
+
     # If there is no view with a TimeFrame, return an empty list.
     if tf_view_id is None:
         logging.info("MMIF file contained no SWT TimeFrame annotations.")
-        tfsd = []
         return tfsd
 
     # Otherwise, get the relevant views
@@ -293,9 +298,8 @@ def tfsd_from_mmif( usemmif:Mmif,
             "time": ann.get_property("timePoint"),
             "tp_label": ann.get_property("label") }
 
-    # Build a list of TF anns
+    # Build up the list of TF anns
     # (list of dictionaries of TFs)
-    tfsd = []
     for ann in tf_view.get_annotations(AnnotationTypes.TimeFrame):
         tf = {}
         tf["tf_id"] = ann.get_property("id")
@@ -348,6 +352,7 @@ def tfsd_from_mmif( usemmif:Mmif,
     return tfsd
 
 
+
 def adjust_tfsd( tfsd_in:list, 
                  first_time:int,
                  final_time:int,
@@ -373,7 +378,7 @@ def adjust_tfsd( tfsd_in:list,
         if key not in PROC_SWT_DEFAULTS:
             logging.warning("Warning: `" + key + "` is not a valid param for tfsd adjustment. Ignoring.")
 
-    # Set parameters not passed in to their defaul values
+    # Set parameters not passed in to their default values
     # If "default_to_none" is True, then parameters not explicitly passed in will be 
     # assigned the `None` value.
     params = {}

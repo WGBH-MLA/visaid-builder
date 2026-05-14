@@ -215,7 +215,7 @@ def run_post( item:dict,
             print(ins + f'  * Max overlap at {lilhelp.tconv(movl["start"])} ({movl["start"]} ms) for {lilhelp.tconv(movl["dur"])} ({movl["dur"]} ms).')
 
     # Create an adjusted TimeFrame table (with scenes added and/or removed)
-    if pp_params["adj_tfs"] and len(tfsd) and final_time is not None:
+    if pp_params["adj_tfs"] and final_time is not None:
         tfsd_adj = proc_swt.adjust_tfsd( tfsd, 
                                          first_time, 
                                          final_time, 
