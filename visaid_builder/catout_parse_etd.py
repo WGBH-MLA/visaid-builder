@@ -4,8 +4,8 @@ catout_parse_etd.py
 Structural parsing logic for the editor text document (etd) field that 
 is part of a catout entry.
 
-The logic here assumes specific rules and conventions for structuring
-the data in the editor fields of cataids.
+The logic here assumes specific high level rules and conventions for 
+structuring the data in the editor fields of cataids.
 
 It assumes the vocabulary from `catout_vocab`, but it does not rely on 
 semantic properties of terms in the vocab.
@@ -246,8 +246,9 @@ def parse_catears ( lines:list, asset_id:str = None ) -> dict:
         catears = [ c.strip() for c in l.split("^^") if c.strip() ]
 
         if len(catears) > 1:
-            #print(f"***  MORE THAN ONE CATEAR ON A LINE *** {asset_id}")
-            #print(l)
+            print(f"***  MORE THAN ONE CATEAR ON A LINE *** {asset_id}")
+            print(l)
+            #d["_problem"] = True
             pass
 
         for c in catears:
@@ -255,22 +256,27 @@ def parse_catears ( lines:list, asset_id:str = None ) -> dict:
 
             # look for key-value catears
             if c.find(":") == 0:
+                # Case: no earkey
                 invalid_catear = True
-
             elif c.find(":") > 0:
-                # key is substring up to colon
-                k = c[:c.find(":")]
-                # value is everything after
-                v = c[c.find(":")+1:].strip()
-            
+                # Case: key-value-style earkey with colon
+                # (Note that this would prevent using a colon in the value data)
+                # earkey is the substring up to colon, minus whitespace
+                k = c[:c.find(":")].strip()
+                if k:
+                    # value is everything after the colon, minus whitespace
+                    v = c[c.find(":")+1:].strip()
+                else:
+                    # key is empty string
+                    invalid_catear = True
             elif c.find(" ") != -1:
+                # Case: text after catear key without colon
                 # key is substring up to first space
                 k = c[:c.find(" ")]
                 # value is everything after
                 v = c[c.find(" ")+1:].strip()
-
             else:
-                # non-key-value catear
+                # Case: non-key-value catear
                 k = c
                 v = True
             

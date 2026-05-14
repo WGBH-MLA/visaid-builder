@@ -3,10 +3,11 @@
 def stringify_catear_data( d:dict) -> str:
     s = ""
     for k in d:
-        if d[k] == True:
-            s += ("^^" + k +  " ")
-        else:
-            s += ("^^" + k + ": " + d[k] + " ")
+        # if d[k] == True:
+        #     s += ("^^" + k +  " ")
+        # else:
+        #     s += ("^^" + k + ": " + d[k] + " ")
+        s += f"{k}: {d[k]} <br>" 
     
     return s
 
@@ -151,7 +152,7 @@ def make_chyron_review_table( outtable ):
     for f in fields2:
         html_table_start += f"<th>{f}</th>"
     
-    html_table_start += f"<th>cat ears</th>"
+    html_table_start += f"<th>cat_ear_values</th>"
 
     html_table_start += "\n</tr></thead>\n<tbody>"
 
