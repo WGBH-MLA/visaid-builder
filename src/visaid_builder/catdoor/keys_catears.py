@@ -1,4 +1,11 @@
+"""
+catout_ears_keys.py
 
+Vocabulary and logic for specific catears and keys.
+
+The logic here comes into play only after the "etd_text" has already
+been parsed into keys (catear or normal) and their values.
+"""
 
 VALID_CATEARS = [
     "home",

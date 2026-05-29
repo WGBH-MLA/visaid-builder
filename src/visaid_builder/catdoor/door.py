@@ -13,9 +13,9 @@ import argparse
 from pathlib import Path
 import json
 
-from . import catout_tables
-from . import catout_ingests
-from . import catout_parse_etd
+from . import html_tables
+from . import ams_ingests
+from . import parse_etd
 
 
 def tablify_catouts( paths:list ) -> list:
@@ -70,7 +70,7 @@ def tablify_catouts( paths:list ) -> list:
             new_rows = []
             for ei in catoutd["editor_items"]:
 
-                etd_recs = catout_parse_etd.parse_etd( ei["etd_text"], catoutd["asset_id"] )
+                etd_recs = parse_etd.parse_etd( ei["etd_text"], catoutd["asset_id"] )
 
                 # it is possible to have multiple etd records for a single editor_item
                 for etd_rec in etd_recs:
@@ -161,17 +161,17 @@ def main():
 
     # Choose the output type
     if args.type == "html-etd":
-        out_str = catout_tables.make_etd_table(catout_table)
+        out_str = html_tables.make_etd_table(catout_table)
     elif args.type == "html-chy":
-        out_str = catout_tables.make_chyron_review_table(catout_table)
+        out_str = html_tables.make_chyron_review_table(catout_table)
     elif args.type == "html-exp":
-        out_str = catout_tables.make_exp_table(catout_table)
+        out_str = html_tables.make_exp_table(catout_table)
     elif args.type == "html-key":
-        out_str = catout_tables.make_keyed_data_table(catout_table)
+        out_str = html_tables.make_keyed_data_table(catout_table)
     elif args.type == "html-prob":
-        out_str = catout_tables.make_prob_table(catout_table)
+        out_str = html_tables.make_prob_table(catout_table)
     elif args.type[:7] == "csv-con":
-        out_str = catout_ingests.make_basic_contrib_ingest(catout_table)
+        out_str = ams_ingests.make_basic_contrib_ingest(catout_table)
 
     if args.output:
         out_fname = args.output

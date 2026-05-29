@@ -7,11 +7,11 @@ is part of a catout entry.
 The logic here assumes specific high level rules and conventions for 
 structuring the data in the editor fields of cataids.
 
-It assumes the vocabulary from `catout_vocab`, but it does not rely on 
+It assumes the vocabulary from `catout_ears_keys`, but it does not rely on 
 semantic properties of terms in the vocab.
 """
 
-from . import catout_vocab
+from .keys_catears import VALID_KEYS, VALID_CATEARS
 
 
 
@@ -121,7 +121,7 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
         k = l[1:l.find(":")].strip()
         v = l[l.find(":")+1:].strip()
 
-        if k not in catout_vocab.VALID_KEYS:
+        if k not in VALID_KEYS:
             rec_invalid_sec(sec, asset_id, "Invalid key")
             problem = True
 
@@ -280,7 +280,7 @@ def parse_catears ( lines:list, asset_id:str = None ) -> dict:
                 k = c
                 v = True
             
-            if k not in catout_vocab.VALID_CATEARS:
+            if k not in VALID_CATEARS:
                 invalid_catear = True
                 rec_invalid_sec(l, asset_id, msg="Invalid catear")
 
