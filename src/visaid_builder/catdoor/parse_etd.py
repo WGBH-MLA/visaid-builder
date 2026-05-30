@@ -1,17 +1,17 @@
 """
-catout_parse_etd.py
+parse_etd.py
 
-Structural parsing logic for the editor text document (etd) field that 
-is part of a catout entry.
+Structural/syntactic parsing logic for the editor text document (etd) field 
+that is part of a catout entry.
 
 The logic here assumes specific high level rules and conventions for 
 structuring the data in the editor fields of cataids.
 
-It assumes the vocabulary from `catout_ears_keys`, but it does not rely on 
+It assumes the vocabulary from `keys_catears`, but it does not rely on 
 semantic properties of terms in the vocab.
 """
 
-from .keys_catears import VALID_KEYS, VALID_CATEARS
+from .keys_catears import KEYS, CATEARS
 
 
 
@@ -28,6 +28,17 @@ def parse_etd( etd_text:str, asset_id:str = None ) -> list:
     This function divides muliplexed editor text, uses a heuristic to choose
     the appropriate parsing, and then calls the appropriate parsing functions.
     It then returns a list of the results of each of those parsing functions.
+
+    Keys in the returned dictionary:
+       "problem" - indicates any problem in parsing the etd data
+       "etd_type" - the data convention (and type of parsing performed)
+                    values: 'empty', 'keyed', 'chyron', 'catears-only', 'other'
+       "chyron_data" - a dictionary of chyron data with 3 keys:
+                    "name_as_written", "name_normalized", "person_attributes"
+       "keyed_data" - a dictionary of whatever keyed data was in a section, 
+                    with keys limited to values in `KEYS`
+       "catear_data" - a dictionary of whatever catear keyed data was in a 
+                    section, with keys limited to values in `CATEARS`
     """
 
     # allow multiple records per etd text
@@ -91,7 +102,12 @@ def parse_sec_empty( sec: str, asset_id:str = None ) -> dict:
 
 def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
     """
-    Parse as keyed/bullet list of values.
+    Parse bullet list lines as key-value pairs, with a list of values
+    for each key.
+
+    Parse catears lines as catear key-value pairs.
+    Catears in the values of keyed data lines are not handled here
+    and are left to whatever is parsing values.
     """
 
     problem = False
@@ -121,7 +137,7 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
         k = l[1:l.find(":")].strip()
         v = l[l.find(":")+1:].strip()
 
-        if k not in VALID_KEYS:
+        if k not in KEYS:
             rec_invalid_sec(sec, asset_id, "Invalid key")
             problem = True
 
@@ -130,7 +146,11 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
             problem = True
 
         # Keys are repeatable.  Accumulate a list of values.
-        keyed_data.setdefault(k, []).append(v)
+        if k in keyed_data:
+            keyed_data[k].append(v)
+        else:
+            keyed_data[k] = [v]
+        
 
     r = {}
     r["problem"] = problem
@@ -280,7 +300,7 @@ def parse_catears ( lines:list, asset_id:str = None ) -> dict:
                 k = c
                 v = True
             
-            if k not in VALID_CATEARS:
+            if k not in CATEARS:
                 invalid_catear = True
                 rec_invalid_sec(l, asset_id, msg="Invalid catear")
 
@@ -299,7 +319,6 @@ def rec_invalid_sec( sec: str, asset_id:str = None, msg:str = None ):
 
     For now, just prints out informative message.
     """
-
 
     print()
     if not msg:

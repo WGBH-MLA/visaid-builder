@@ -1,11 +1,15 @@
 """
-catout_door.py
+door.py
 
-Handles high-level processing out "catout" JSON files.
+This is the "cat door" through which data gets from cataid output ("catout" JSON 
+files) into a viewable format, or a structure suitable for ingest elsewhere.
 
-Also provides CLI interface for invoking processing.
+This module handles high-level processing out "catout" JSON files.
+It also provides CLI interface to invoke processing.
+(Actual logic for parsing editor text from catouts is in separte module.)
 
-Logic for parsing editor text from catouts is in separte module.
+Catdoor processing proceeds by processing a batch of catout files into a tabular
+format where each row is an entry created on a cataid.
 
 """
 
@@ -29,7 +33,7 @@ def tablify_catouts( paths:list ) -> list:
     This function operates at the aggregate level over lots of catouts.  
 
     This function works only at the level of explicit structure.  It calls
-    a parsing function to interpret implicit structure.    
+    a parsing function in a separate module to interpret implicit structure.    
 
     Each list item is a dictionary with the following dkeys
 
@@ -99,35 +103,44 @@ def tablify_catouts( paths:list ) -> list:
     return catout_table
 
 
+
 def main():
 
+    output_types = [
+        "html-etd",
+        "html-chy",
+        "html-exp",
+        "html-key",
+        "html-prob",
+        "ams-con-basic",
+        "ams-con-full"
+    ]
+
     parser = argparse.ArgumentParser(
-        prog='catoutout',
+        prog='catdoor',
         description='Outputs information from a collection of cataid output (catout) files',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-
     parser.add_argument(
         "paths", 
         type=str,
         metavar="CATOUTPATH",
         nargs="+",
         help="Path to a single catout JSON file or a directory with many")
-
     parser.add_argument(
         "-o", "--output",
         type=str,
         help="Path to the output file")
-
     parser.add_argument(
         "-t", "--type",
         type=str,
         default="html-etd",
         help="Type of output to write")
 
-
     args = parser.parse_args()
-    pattern = "*_catout*.json"
+
+    # validate file and directory paths passed in
+    catout_pattern = "*_catout*.json"
     catout_paths = []
 
     for path_str in args.paths:
@@ -137,27 +150,35 @@ def main():
             print(f"Warning: '{path_str}' does not exist. Skipping...")
             continue
 
-        if input_path.is_file():
+        elif input_path.is_file():
             # Check if the single file matches our required naming convention
-            if input_path.match(pattern):
+            if input_path.match(catout_pattern):
                 catout_paths.append(input_path)
             else:
-                print(f"Warning: File '{path_str}' does not match pattern {pattern}. Skipping.")
+                print(f"Warning: File '{path_str}' does not match pattern {catout_pattern}. Skipping.")
             
         elif input_path.is_dir():
             # Find all matching files within the directory
-            matches = list(input_path.glob(pattern))
+            matches = list(input_path.glob(catout_pattern))
             catout_paths.extend(matches)
 
     # De-duplicate and sort for a clean list
     catout_paths = sorted(list(set(catout_paths)))
 
-    # Create the quasi-tabular structure
-    if catout_paths:
-        catout_table = tablify_catouts( catout_paths )
-    else:
-        print("No valid catout files specified.  Exiting.")
+    if not catout_paths:
+        print("No valid catout files specified.")
+        print("Exiting.")
         return
+
+    if args.type not in output_types:
+        print("Invalid output type specified.")
+        print("Output type must be one of: " +  ", ".join(output_types) )
+        print("Exiting.")
+        return
+
+    # Call the primary catout processing function to create a quasi-tabular structure
+    # (This is the time-consuming step.)
+    catout_table = tablify_catouts( catout_paths )
 
     # Choose the output type
     if args.type == "html-etd":
@@ -170,9 +191,15 @@ def main():
         out_str = html_tables.make_keyed_data_table(catout_table)
     elif args.type == "html-prob":
         out_str = html_tables.make_prob_table(catout_table)
-    elif args.type[:7] == "csv-con":
+    elif args.type == "ams-con-basic":
         out_str = ams_ingests.make_basic_contrib_ingest(catout_table)
+    elif args.type == "ams-con-full":        
+        out_str = ams_ingests.make_full_contrib_ingest(catout_table)
+    else:
+        out_str = None
+        print(f"Invalid output type: {args.type}")
 
+    # Name the output file
     if args.output:
         out_fname = args.output
     else:
