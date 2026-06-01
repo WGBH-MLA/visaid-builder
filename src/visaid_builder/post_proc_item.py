@@ -23,7 +23,6 @@ start time after this point.)
 
 """
 
-# %%
 # Run import statements
 
 import csv
@@ -102,7 +101,6 @@ def run_post( item:dict,
     # Set up for the particular kinds of artifacts requested 
     if "artifacts" in params:
         artifacts = params["artifacts"]
-        artifacts_dir = cf["artifacts_dir"]
     else:
         print(ins + "Warning: No artifacts specified.")  
         artifacts = []
@@ -247,7 +245,10 @@ def run_post( item:dict,
     artifact = "slates"
     if artifact in artifacts:
         print(ins + "Attempting to save a slate...")
-        slates_dir = artifacts_dir + "/" + artifact
+
+        slates_dir = cf["artifacts_dir"]
+        if not cf.get("flat_dir"):
+            slates_dir +=  "/" + artifact
 
         # The slate rep is the rep timepoint from from the first slate timeframe
         # If there is not slate timeframe, then the value is None
@@ -290,7 +291,10 @@ def run_post( item:dict,
     artifact = "reps"
     if artifact in artifacts:
         print(ins + "Attempting to save representative stills...")
-        reps_dir = artifacts_dir + "/" + artifact
+
+        reps_dir = cf["artifacts_dir"]
+        if not cf.get("flat_dir"):
+            reps_dir +=  "/" + artifact
 
         if len(tfs_adj) > 0:
             tps = [ tf[4] for tf in tfs_adj ] 
@@ -328,7 +332,10 @@ def run_post( item:dict,
     artifact = "ksl"
     if artifact in artifacts:
         print(ins + "Attempting to index representatives in a KSL-style index...")
-        ksl_dir = artifacts_dir + "/" + artifact
+
+        ksl_dir = cf["artifacts_dir"]
+        if not cf.get("flat_dir"):
+            ksl_dir +=  "/" + artifact
 
         if not "reps" in artifacts:
             print(ins + "Cannot make index because representative stills were not extracted.")
@@ -419,7 +426,10 @@ def run_post( item:dict,
     artifact = "visaids"
     if artifact in artifacts:
         print(ins + "Attempting to make a visaid...")
-        visaids_dir = artifacts_dir + "/" + artifact
+        
+        visaids_dir = cf["artifacts_dir"]
+        if not cf.get("flat_dir"):
+            visaids_dir += "/" + artifact
 
         visaid_path = None
         visaid_problems = []
@@ -460,7 +470,10 @@ def run_post( item:dict,
     artifact = "cataids"
     if artifact in artifacts:
         print(ins + "Attempting to create a cataid...")
-        cataids_dir = artifacts_dir + "/" + artifact
+
+        cataids_dir = cf["artifacts_dir"]
+        if not cf.get("flat_dir"):
+            cataids_dir += "/" + artifact
 
         cataid_path = None
         cataid_problems = []
@@ -506,7 +519,10 @@ def run_post( item:dict,
     artifact = "data"
     if artifact in artifacts:
         print(ins + "Attempting to infer data...")
-        data_dir = artifacts_dir + "/" + artifact
+
+        data_dir = cf["artifacts_dir"]
+        if not cf.get("flat_dir"):
+            data_dir += "/" + artifact
 
         # Get data from preceding cataids or visaids process
         if "cataids" in artifacts and cataid_extras:
