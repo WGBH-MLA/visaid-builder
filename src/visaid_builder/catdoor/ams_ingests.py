@@ -23,6 +23,11 @@ def map_contrib_key_val( v:str, tp_time ) -> dict:
     else:
         aff_ann = None
 
+    if d["role"]:
+        role = d["role"]
+    else:
+        role = "Appearing"
+
     contrib = {
         "contributor": d["name_normalized"],
         "annotation": None,
@@ -30,7 +35,7 @@ def map_contrib_key_val( v:str, tp_time ) -> dict:
         "time_annotation": "Cataid Scene", 
         "affiliation": None,
         "affiliation_annotation": aff_ann,
-        "contributor_role": d["role"], 
+        "contributor_role": role,
         "contributor_role_annotation": None
     }
     return contrib
@@ -49,7 +54,7 @@ def map_chyron_sec( r:dict ) -> dict:
         d = keys_catears.CATEARS["role"]( r["etd_data"]["catear_data"]["role"] )
         role = d["role"]
     else:
-        role = None
+        role = "Appearing"
 
     contrib = {
         "contributor": r["etd_data"]["chyron_data"]["name_normalized"], 
@@ -101,8 +106,7 @@ def make_full_contrib_ingest( outtable ):
         for c in all_guid_contribs:
             c_uniqueness = (c["contributor"],c["contributor_role"],c["contributor_role_annotation"])
             current_uniques = [ (c["contributor"],c["contributor_role"],c["contributor_role_annotation"]) for c in guid_contribs[guid] ] 
-            #if c_uniqueness not in current_uniques:
-            if True:
+            if c_uniqueness not in current_uniques:
                 guid_contribs[guid].append(c)
 
     max_contribs = max( [ len(guid_contribs[guid]) for guid in guid_contribs ] ) 
@@ -130,8 +134,8 @@ def make_full_contrib_ingest( outtable ):
         "contributor_role",
         "contributor_role_annotation"
     ]
-    contribution_cols = min_contribution_cols
-    # contribution_cols = exp_contribution_cols
+    # contribution_cols = min_contribution_cols
+    contribution_cols = exp_contribution_cols
     # contribution_cols = all_contribution_cols
 
     # create enough column headers for everyone from each item
@@ -243,8 +247,7 @@ def make_basic_contrib_ingest( catout_table ):
         if all_guid_contribs:
             guid_contribs[guid] = []
             for c in all_guid_contribs:
-                #if c not in guid_contribs[guid]:
-                if True:
+                if c not in guid_contribs[guid]:
                     guid_contribs[guid].append(c)
 
 
