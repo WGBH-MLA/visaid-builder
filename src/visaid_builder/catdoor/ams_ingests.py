@@ -85,8 +85,9 @@ def make_full_contrib_ingest( outtable ):
         for r in [r for r in outtable if r["asset_id"] == guid]:
 
             if r["etd_data"]["etd_type"] == "chyron":
-                contrib = map_chyron_sec(r)
-                all_guid_contribs.append(contrib)
+                if "sens" not in r["etd_data"]["catear_data"]:
+                    contrib = map_chyron_sec(r)
+                    all_guid_contribs.append(contrib)
     
             elif r["etd_data"]["etd_type"] == "keyed":
                 if "contrib" in r["etd_data"]["keyed_data"]:
