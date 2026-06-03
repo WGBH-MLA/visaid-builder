@@ -14,7 +14,7 @@ import re
 ############################################################################
 
 def parse_key_contrib( v: str ) -> dict:
-    problem = False
+    problems = []
 
     # Find the role in parenetheses
     rolematch = re.search(r'\((.*?)\)', v)
@@ -28,26 +28,31 @@ def parse_key_contrib( v: str ) -> dict:
         if role_str in ROLES:
             role = role_str
         else:
-            problem = True
+            problems.append("Invalid role")
             role = None
     else:
         name = v.split("^")[0].strip()
         role = None        
 
-    # Check for a ^^home catear flag
+    # Check for a ^^home in-value catear flag
     if v.find("^^home") != -1:
         home = True
     else:
         home = False
 
-    # Check for the ^^np 
+    # Check for the ^^np in-value catear flag
     if v.find("^^np") != -1:
         pictured = False
     else:
         pictured = True
+    
+    # Check for invalid in-value catears
+    if v.find("^^") not in [ -1, v.find("^^home"), v.find("^^np") ]:
+        problems.append("Invalid catear")
 
     d = {
-        "problem": problem,
+        "raw_value": v,
+        "problems": problems,
         "name_normalized": name,
         "role": role,
         "home": home,
@@ -56,18 +61,49 @@ def parse_key_contrib( v: str ) -> dict:
     return d
 
 
+def parse_key_generic( v:str ) -> dict:
+    problems = []
+
+    if v.find("*") != -1:
+        problems.append("Key value contains asterisk")
+
+    d = {
+        "raw_value": v,
+        "problems": problems
+    }
+    return d
+
+
+############################################################################
+# Catear-specific parsing functions
+############################################################################
+
 def parse_catear_role( v:str ) -> dict:
-    problem = False
+    problems = []
 
     if v.strip() in ROLES:
         role = v.strip()
     else:
-        problem = True
+        problems.append("Invalid role")
         role = None
 
     d = {
-        "problem": problem,
+        "raw_value": v,
+        "problems": problems,
         "role": role
+    }
+    return d
+
+
+def parse_catear_generic( v:str ) -> dict:
+    problems = []
+
+    if v.find("^") != -1:
+        problems.append("Catear value contains caret")
+
+    d = {
+        "raw_value": v,
+        "problems": problems
     }
     return d
 
@@ -80,32 +116,32 @@ def parse_catear_role( v:str ) -> dict:
 ############################################################################
 
 CATEARS = {
-    "home": None,
-    "miss": None,
-    "sens": None,
-    "cw":   None,
-    "note": None,
-    "np":   None,
+    "home": parse_catear_generic,
+    "miss": parse_catear_generic,
+    "sens": parse_catear_generic,
+    "cw":   parse_catear_generic,
+    "note": parse_catear_generic,
+    "np":   parse_catear_generic,
     "role": parse_catear_role
 }
 
 
 KEYS = {
     "contrib": parse_key_contrib,
-    "air": None,
-    "rec": None,
-    "copyright-year": None,
-    "copyright-owner": None,
-    "copr": None, 
-    "date": None,
-    "prog-title": None,
-    "series-title": None,
-    "ep-title": None, 
-    "title": None,
-    "ep-no": None,
-    "dir": None,
-    "prod": None,
-    "cam": None
+    "air": parse_key_generic,
+    "rec": parse_key_generic,
+    "copyright-year": parse_key_generic,
+    "copyright-owner": parse_key_generic,
+    "copr": parse_key_generic, 
+    "date": parse_key_generic,
+    "prog-title": parse_key_generic,
+    "series-title": parse_key_generic,
+    "ep-title": parse_key_generic, 
+    "title": parse_key_generic,
+    "ep-no": parse_key_generic,
+    "dir": parse_key_generic,
+    "prod": parse_key_generic,
+    "cam": parse_key_generic
 }
 
 # from locoal controlled vocabulary

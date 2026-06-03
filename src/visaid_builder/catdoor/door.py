@@ -107,6 +107,7 @@ def tablify_catouts( paths:list ) -> list:
 def main():
 
     output_types = [
+        "none",
         "html-etd",
         "html-chy",
         "html-exp",
@@ -134,7 +135,7 @@ def main():
     parser.add_argument(
         "-t", "--type",
         type=str,
-        default="html-etd",
+        default="none",
         help="Type of output to write")
 
     args = parser.parse_args()
@@ -195,6 +196,8 @@ def main():
         out_str = ams_ingests.make_basic_contrib_ingest(catout_table)
     elif args.type == "ams-con-full":        
         out_str = ams_ingests.make_full_contrib_ingest(catout_table)
+    elif args.type == "none":
+        out_str = None
     else:
         out_str = None
         print(f"Invalid output type: {args.type}")
@@ -216,9 +219,6 @@ def main():
         with open(out_fname, "w") as f:
             f.write(out_str)
             print(f"Wrote output file to to {out_fname}")
-    else:
-        print("No content to output.")
-
 
 if __name__ == "__main__":
     main()

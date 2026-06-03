@@ -1,3 +1,5 @@
+from .keys_catears import KEYS, CATEARS
+import json
 
 
 def stringify_catear_data( d:dict) -> str:
@@ -7,8 +9,10 @@ def stringify_catear_data( d:dict) -> str:
         #     s += ("^^" + k +  " ")
         # else:
         #     s += ("^^" + k + ": " + d[k] + " ")
-        s += f"{k}: {d[k]} <br>" 
-    
+        #s += f"{k}: {d[k]} <br>" 
+        for v in d[k]:
+            s += ("^^" + k + "\n")
+            s += json.dumps( CATEARS[k](v), indent=2 ) + "\n"    
     return s
 
 
@@ -16,7 +20,8 @@ def stringify_keyed_data( d:dict) -> str:
     s = ""
     for k in d:
         for v in d[k]:
-            s += ("*" + k + ": " + v + "\n")
+            s += ("*" + k + "\n")
+            s += json.dumps( KEYS[k](v), indent=2 ) + "\n"
     return s
 
 
