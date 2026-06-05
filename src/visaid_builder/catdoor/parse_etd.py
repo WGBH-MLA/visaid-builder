@@ -7,8 +7,8 @@ that is part of a catout entry.
 The logic here assumes specific high level rules and conventions for 
 structuring the data in the editor fields of cataids.
 
-It assumes the vocabulary from `keys_catears`, but it does not rely on 
-semantic properties of terms in the vocab.
+It assumes the vocabulary from `keys_catears`, and it uses the key-specific
+or catear-specific functions there to validate values.  
 """
 
 from .keys_catears import KEYS, CATEARS
@@ -99,6 +99,9 @@ def rec_problem( txt:str, asset_id:str = None, msg:str = None ) -> None:
     print(f"```\n{txt}\n```\n")
 
 
+############################################################################
+# Section parsing functions
+############################################################################
 
 def parse_sec_empty( sec: str, asset_id:str = None ) -> dict:
     """
@@ -193,10 +196,10 @@ def parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
     if len(n4lines) > 2:
         chyron_data["person_attributes"] = "; ".join(n4lines[2:])
     else:
-        chyron_data["person_attributes"] = ""
+        chyron_data["person_attributes"] = None
 
     for k in ["name_as_written", "name_normalized", "person_attributes" ]:
-        if chyron_data[k].find("^^") != -1:
+        if chyron_data[k] is not None and chyron_data[k].find("^^") != -1:
             rec_problem(sec, asset_id, "Catears in chyron data")
             problem = True
     
@@ -270,8 +273,17 @@ def parse_sec_other( sec: str, asset_id:str = None ) -> dict:
     return r
 
 
+############################################################################
+# Line parsing functions
+############################################################################
 
 def parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
+    """
+    Takes a list of lines of text.
+    Returns a dictionary where the keys are in the list of valid keys.
+    The value of each key is a list of string values.
+    """
+
     keyed_data = {}
     problem = False
 
@@ -286,8 +298,9 @@ def parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
             rec_problem(l, asset_id, "Invalid key")
             problem = True
         
-        # validate value by calling the key-specific function in the dispatch table
-        # (we're just going to check for problems discovered.)
+        # Validate value by calling the key-specific function in the dispatch table
+        # (We're just going to check for problems discovered.  We are not using any
+        #  transformation peformed by the dispatch function.)
         elif KEYS[k]:
             ki = KEYS[k](v)
             if ki["problems"]:
@@ -307,6 +320,12 @@ def parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
 
 
 def parse_catear_lines ( lines:list, asset_id:str = None ) -> dict:
+    """
+    Takes a list of lines of text.
+    Returns a dictionary where the keys are in the list of valid catears.
+    The value of each key is a string value (not a list).
+    """
+
     catear_data = {}
     problem = False
 
@@ -317,8 +336,8 @@ def parse_catear_lines ( lines:list, asset_id:str = None ) -> dict:
 
         if len(catears) > 1:
             # Should we allow more than one catear per line?  As of now, we do.  
-            print(f"***  MORE THAN ONE CATEAR ON A LINE *** {asset_id}")
-            print(l)
+            #print(f"***  MORE THAN ONE CATEAR ON A LINE *** {asset_id}")
+            #print(l)
             pass
 
         for c in catears:
@@ -349,10 +368,17 @@ def parse_catear_lines ( lines:list, asset_id:str = None ) -> dict:
                 k = c
                 v = ""
             
-            if not invalid_catear:
+            if invalid_catear:
+                rec_problem(l, asset_id, msg="Invalid catear line")
+                problem = True
+            else:
                 if k not in CATEARS:
                     rec_problem(l, asset_id, msg="Invalid catear")
                     problem = True
+
+                # Validate value by calling the catear-specific function in the dispatch table
+                # (We're just going to check for problems discovered.  We are not using any
+                #  transformation peformed by the dispatch function.)
                 elif CATEARS[k]:
                     ki = CATEARS[k](v)
                     if ki["problems"]:
@@ -361,11 +387,8 @@ def parse_catear_lines ( lines:list, asset_id:str = None ) -> dict:
                         problem = True
                     else:
                         # Key and value are valid.
-                        if k in catear_data:
-                            # Catears are repeatable.  Accumulate a list of values.
-                            catear_data[k].append(v)
-                        else:
-                            catear_data[k] = [ v ]
+                        # Unlike keys, catears are not repeatable.
+                        catear_data[k] = v 
 
     return catear_data, problem
 

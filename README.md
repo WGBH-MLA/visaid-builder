@@ -17,7 +17,7 @@ The `post_proc_item` module includes functions called by `run_job` from [CLAMS K
 
 ### Cataid output procesing (out the cat door)
 
-This package also has functions for analyzing and manipulaing the JSON files yielded by human engagement with a cataid.  This functionallity is defined in the `catout_*` modules.
+This package also has functions for analyzing and manipulaing the JSON files yielded by human engagement with a cataid.  This functionallity is defined in the modules in the `catdoor` directory.
 
 ## Installation
 
@@ -45,6 +45,7 @@ visswt -d -v sample_files/cpb-aacip-4071f72dd46_swt_v72.mmif sample_files/cpb-aa
 ```
 
 To perform ETL operations with catout files (as exported by humans from cataids), use the `catdoor` command.  To see available options, run `catdoor -h`.
+
 
 ### Integration of visaid creation in Python projects
 

@@ -5,6 +5,9 @@ Vocabulary and logic for specific catears and keys.
 
 The logic here comes into play only after the "etd_text" has already
 been parsed into keys (catear or normal) and their values.
+
+More key-specific and catear-specific fucntions may be added over time
+to accomodate different types of data.
 """
 
 import re
@@ -34,21 +37,18 @@ def parse_key_contrib( v: str ) -> dict:
         name = v.split("^")[0].strip()
         role = None        
 
-    # Check for a ^^home in-value catear flag
-    if v.find("^^home") != -1:
-        home = True
-    else:
-        home = False
+    # Find all inline catear tags (capturing the alphanumeric characters directly following '^^')
+    inline_tags = re.findall(r'\^\^(\w*)', v)
 
-    # Check for the ^^np in-value catear flag
-    if v.find("^^np") != -1:
-        pictured = False
-    else:
-        pictured = True
+    # Set boolean flags based on presence of the valid tags
+    home = "home" in inline_tags
+    pictured = "np" not in inline_tags
     
-    # Check for invalid in-value catears
-    if v.find("^^") not in [ -1, v.find("^^home"), v.find("^^np") ]:
-        problems.append("Invalid catear")
+    # Validate that every inline catear matches our allowed tags list
+    for tag in inline_tags:
+        if tag not in ["home", "np"]:
+            problems.append("Invalid catear")
+            break
 
     d = {
         "raw_value": v,

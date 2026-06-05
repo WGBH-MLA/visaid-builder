@@ -1,6 +1,8 @@
 """
 ams_ingests.py
 
+The functions support creation of CSV files with columns suitable for batch
+ingest into AMS2.
 """
 
 import re
@@ -51,6 +53,7 @@ def map_chyron_sec( r:dict ) -> dict:
         aff_ann = None
 
     if "role" in r["etd_data"]["catear_data"]:
+        # parse the role value
         d = keys_catears.CATEARS["role"]( r["etd_data"]["catear_data"]["role"] )
         role = d["role"]
     else:
@@ -100,77 +103,88 @@ def make_full_contrib_ingest( outtable ):
                         contrib = map_contrib_key_val(v, r["tp_time"])
                         all_guid_contribs.append(contrib)
 
-        # Add just unique contributor entries
-        # Uniqueness is determined by the normalized name, the role, and the role annotation
-        guid_contribs[guid] = []
-        for c in all_guid_contribs:
-            c_uniqueness = (c["contributor"],c["contributor_role"],c["contributor_role_annotation"])
-            current_uniques = [ (c["contributor"],c["contributor_role"],c["contributor_role_annotation"]) for c in guid_contribs[guid] ] 
-            if c_uniqueness not in current_uniques:
-                guid_contribs[guid].append(c)
+        # If there were any contrib entries for this guid, create list for it.
+        if all_guid_contribs:        
+            guid_contribs[guid] = []
 
-    max_contribs = max( [ len(guid_contribs[guid]) for guid in guid_contribs ] ) 
+            # Add just unique contributor entries
+            # Uniqueness is determined by the normalized name, the role, and the role annotation.
+            # (For this ingest, we do not want duplicates of that triple.)
+            seen_uniques = set()
+
+            for c in all_guid_contribs:
+                c_uniqueness = (c["contributor"],c["contributor_role"],c["contributor_role_annotation"])
+                if c_uniqueness not in seen_uniques:
+                    seen_uniques.add(c_uniqueness)
+                    guid_contribs[guid].append(c)
+
+    if not guid_contribs:
+        print("No contributor records found.")
+        return None
+
+    else:
+        max_contribs = max( [ len(guid_contribs[guid]) for guid in guid_contribs ] ) 
+        
+        print(f"Will create contributor records for {len(guid_contribs)} items.")
+        print(f"Max contributors per item: {max_contribs}")
+
+        min_contribution_cols = [
+            "contributor", 
+            "contributor_role"
+        ]
+        exp_contribution_cols = [
+            "contributor", 
+            "annotation", 
+            "affiliation", 
+            "contributor_role"
+        ]
+        all_contribution_cols = [
+            "contributor", 
+            "annotation", 
+            "start_time", 
+            "time_annotation", 
+            "affiliation", 
+            "affiliation_annotation", 
+            "contributor_role",
+            "contributor_role_annotation"
+        ]
+        contribution_cols = min_contribution_cols
+        # contribution_cols = exp_contribution_cols
+        # contribution_cols = all_contribution_cols
+
+        # create enough column headers for everyone from each item
+        csv_header_row = ["Asset", "Asset.id"]
+        for _ in range(max_contribs):
+            csv_header_row += ["Contribution"] + [ "Contribution."+col for col in contribution_cols ]
+
+        # first row is thea header
+        csv_rows = [ csv_header_row ]
+
+        # add rows for each asset
+        contrib_recs = 0
+        for guid in guid_contribs:
+            # ["Asset", "Asset.id"]
+            row = ["", guid]
     
-    print(f"Will create contributor records for {len(guid_contribs)} items.")
-    print(f"Max contributors per item: {max_contribs}")
+            # ["Contribution", ... ]
+            for c in guid_contribs[guid]:
+                row += [""] + [ c[col] for col in contribution_cols ]
+                contrib_recs += 1
+    
+            # add extra cells in rows where there item had fewer than the max contribs
+            pad = max_contribs - len(guid_contribs[guid])
+            for _ in range(pad):
+                row += [""] * (1 + len(contribution_cols))
 
-    min_contribution_cols = [
-        "contributor", 
-        "contributor_role"
-    ]
-    exp_contribution_cols = [
-        "contributor", 
-        "annotation", 
-        "affiliation", 
-        "contributor_role"
-    ]
-    all_contribution_cols = [
-        "contributor", 
-        "annotation", 
-        "start_time", 
-        "time_annotation", 
-        "affiliation", 
-        "affiliation_annotation", 
-        "contributor_role",
-        "contributor_role_annotation"
-    ]
-    # contribution_cols = min_contribution_cols
-    contribution_cols = exp_contribution_cols
-    # contribution_cols = all_contribution_cols
+            csv_rows.append(row)
 
-    # create enough column headers for everyone from each item
-    csv_header_row = ["Asset", "Asset.id"]
-    for _ in range(max_contribs):
-        csv_header_row += ["Contribution"] + [ "Contribution."+col for col in contribution_cols ]
+        print(f"Recorded {contrib_recs} contributor records.")
 
-    # first row is thea header
-    csv_rows = [ csv_header_row ]
-
-    # add rows for each asset
-    contrib_recs = 0
-    for guid in guid_contribs:
-        # ["Asset", "Asset.id"]
-        row = ["", guid]
- 
-        # ["Contribution", ... ]
-        for c in guid_contribs[guid]:
-            row += [""] + [ c[col] for col in contribution_cols ]
-            contrib_recs += 1
- 
-        # add extra cells in rows where there item had fewer than the max contribs
-        pad = max_contribs - len(guid_contribs[guid])
-        for _ in range(pad):
-            row += [ "", "", ""]
-
-        csv_rows.append(row)
-
-    print(f"Recorded {contrib_recs} contributor records.")
-
-    # return value is a string of CSV text
-    out_io = io.StringIO()
-    csv.writer(out_io).writerows(csv_rows)
-    csv_string = out_io.getvalue()
-    return csv_string
+        # return value is a string of CSV text
+        out_io = io.StringIO()
+        csv.writer(out_io).writerows(csv_rows)
+        csv_string = out_io.getvalue()
+        return csv_string
 
 
 ########################################################################

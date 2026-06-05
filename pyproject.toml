@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visaid-builder"
-version = "1.99.0"
+version = "1.99.1"
 description = "Routines for processing MMIF files to create visual indexes ('visaids') and other useful output."
 readme = "README.md"
 license = "MIT"

@@ -6,11 +6,10 @@ files) into a viewable format, or a structure suitable for ingest elsewhere.
 
 This module handles high-level processing out "catout" JSON files.
 It also provides CLI interface to invoke processing.
-(Actual logic for parsing editor text from catouts is in separte module.)
+(Logic for parsing editor text from catouts is in separate module.)
 
 Catdoor processing proceeds by processing a batch of catout files into a tabular
-format where each row is an entry created on a cataid.
-
+format, where each row is an entry created on a cataid.
 """
 
 import argparse
@@ -49,7 +48,7 @@ def tablify_catouts( paths:list ) -> list:
     "img_data_uri"            - string: Base64 encoded image beginning "data:image/jpeg;base64,"
     "aid_text"                - string: Extracted text as appearing on cataid
     "etd_text"                - string: Edited text document from user
-    "etd_data":               - dictionary   
+    "etd_data":               - dictionary (defined in parse_etd)
     """
 
     catout_table = []
@@ -113,6 +112,7 @@ def main():
         "html-exp",
         "html-key",
         "html-prob",
+        "html-con",
         "ams-con-basic",
         "ams-con-full"
     ]
@@ -192,6 +192,8 @@ def main():
         out_str = html_tables.make_keyed_data_table(catout_table)
     elif args.type == "html-prob":
         out_str = html_tables.make_prob_table(catout_table)
+    elif args.type == "html-con":
+        out_str = html_tables.make_contrib_ingest_table(catout_table)
     elif args.type == "ams-con-basic":
         out_str = ams_ingests.make_basic_contrib_ingest(catout_table)
     elif args.type == "ams-con-full":        
@@ -206,10 +208,10 @@ def main():
     if args.output:
         out_fname = args.output
     else:
-        base = "catout_table"
+        base = "catout_" + args.type
         if args.type[:4] == "html":
             ext = ".html"
-        elif args.type[:3] == "csv":
+        elif args.type[:3] in ["csv", "ams"]:
             ext = ".csv"
         else:
             ext = ".txt"
@@ -218,7 +220,10 @@ def main():
     if out_str:
         with open(out_fname, "w") as f:
             f.write(out_str)
-            print(f"Wrote output file to to {out_fname}")
+        print(f"Wrote output file to to {out_fname}")
+    else:
+        print(f"No output to write.")
+
 
 if __name__ == "__main__":
     main()
