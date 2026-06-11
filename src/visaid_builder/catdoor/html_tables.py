@@ -563,6 +563,16 @@ def make_contrib_ingest_table( outtable ):
                 "contributor_role",
                 "affiliation_annotation" ]
 
+    colheads = {
+        "asset_id": "Asset ID",
+        "tp_time": "start_time",
+        "contributor": "contributor [Name normalized]",
+        "annotation": "annotation [Name as written]",
+        "contributor_role_annotation": "contributor_role_annotation [On-screen attributes]",
+        "contributor_role": "contributor_role [Role]",
+        "affiliation_annotation": "affiliation_annotation [Home team?]"
+    }
+
     html_css = HTML_CSS
 
     html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
@@ -570,11 +580,11 @@ def make_contrib_ingest_table( outtable ):
     html_table_start = "<table id='catdoor'><thead><tr>\n"
 
     for f in fields1:
-        html_table_start += f"<th>{f}</th>"
-    html_table_start += f"<th>img_data_uri</th>"
-    html_table_start += f"<th>etd_text</th>"
+        html_table_start += f"<th>{colheads[f]}</th>"
+    html_table_start += f"<th>[Still image]</th>"
+    html_table_start += f"<th>[Raw 'etd_text']</th>"
     for f in fields2:
-        html_table_start += f"<th>{f}</th>"
+        html_table_start += f"<th>{colheads[f]}</th>"
 
     html_table_start += "\n</tr></thead>\n<tbody>"
 
@@ -587,7 +597,7 @@ def make_contrib_ingest_table( outtable ):
             if r["etd_data"]["etd_type"] == "chyron":
                 if "sens" not in r["etd_data"]["catear_data"]:
                     c = ams_ingests.map_chyron_sec(r)
-                    c["tp_time"] = r["tp_time"]
+                    c["tp_time"] = f'{((int(r["tp_time"]))/1000):.3f}'
                     c["img_data_uri"] = r["img_data_uri"]
                     c["etd_text"] = r["etd_text"]
                     c["asset_id"] = guid

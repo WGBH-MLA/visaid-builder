@@ -18,7 +18,7 @@ def map_contrib_key_val( v:str, tp_time ) -> dict:
 
     d = keys_catears.KEYS["contrib"](v)
 
-    tp_secs = tp_time / 1000
+    tp_secs = f'{((int(tp_time))/1000):.3f}'
 
     if d["home"]:
         aff_ann = "Producing Organization"
