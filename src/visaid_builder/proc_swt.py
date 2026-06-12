@@ -25,7 +25,8 @@ The valid keys for `params_in` are as follows:
     sample not included in a scene.  Use None to get no unlabeled samples.
 
     "subsampling" (dict) - Key value pairs indicating the milliseconds sampling rate. The 
-    idea is to create enough subsample scenes so that each is shorter than the subsampling threshold.
+    idea is to create enough subsample scenes so that each is shorter than the subsampling 
+    threshold.
     Example: 36s scene with 10s subsampling -> 4 x 9s subsample scenes
 
     "include_first_time" (bool) - Whether to add the first video frame
@@ -114,6 +115,9 @@ def get_td_view_id(usemmif:Mmif):
     """
 
     td_views = usemmif.get_all_views_contain(DocumentTypes.TextDocument)
+
+    #print("**** Num TD views: " , len(list(td_views)) ) #DIAG
+
     cap_td_views = [ view for view in td_views 
                      if view.metadata.app.find("captioner") > -1 ]
 
@@ -276,19 +280,54 @@ def tfsd_from_mmif( usemmif:Mmif,
     # (list of dictionaries of TDs)
     tds = []
     if td_view is not None:
-        # First, get mapping of TD ann to its ource TP ann
-        tas = {}
-        for ann in td_view.get_annotations(AnnotationTypes.Alignment):
-            tas[ann.get_property("target")] = ann.get_property("source") 
 
-        # Build a list of TD anns along with source TP
-        for ann in td_view.get_annotations(DocumentTypes.TextDocument):
-            td = {}
-            td["td_id"] = ann.get_property("id")
-            td["tf_id"] = ann.get_property("origin")
-            td["tp_id"] = tas[td["td_id"]]
-            td["text"] = ann.get_property("text").value
-            tds.append(td)
+        ver = tuple( map(int, get_CLAMS_app_ver(usemmif, td_view_id)[1:].split('.') ) )
+        # print("**** verison: ", ver) #DIAG
+
+        if td_view.metadata.app.find("smolvlm2") > -1 and ver < (1, 0):
+            # smolvlm2-captioner pre-v1.0-beta-style
+            #print("**** LEGACY") # DIAG
+
+            # First, get mapping of TD ann to its source TP ann
+            tas = {}
+            for ann in td_view.get_annotations(AnnotationTypes.Alignment):
+                tas[ann.get_property("target")] = ann.get_property("source") 
+
+            # Build a list of TD anns along with source TP
+            for ann in td_view.get_annotations(DocumentTypes.TextDocument):
+                td = {}
+                td["td_id"] = ann.get_property("id")
+                td["tf_id"] = ann.get_property("origin")
+                td["tp_id"] = tas[td["td_id"]]
+                td["text"] = ann.get_property("text").value
+                tds.append(td)
+
+        else:
+            # New view structure May 2026
+            #print("**** MODERN") # DIAG
+
+            # First, get mapping of TD ann to its source TF ann
+            tas = {}
+            for ann in td_view.get_annotations(AnnotationTypes.Alignment):
+                tas[ann.get_property("target")] = ann.get_property("source") 
+            
+            # Build a list of TD anns along with source TF
+            for ann in td_view.get_annotations(DocumentTypes.TextDocument):
+                td = {}
+                td["td_id"] = ann.get_property("id")
+                td["text"] = ann.get_property("text").value
+
+                # get the TF ann ID from the alignment annotation dictionary
+                td["tf_id"] = tas[td["td_id"]]
+
+                # get the TP ann ID from the *first* item in the origins property
+                if len(ann.get_property("origins")):
+                    td["tp_id"] = ann.get_property("origins")[0]
+                else:
+                    td["tp_id"] = None
+
+                tds.append(td)
+
 
     # Collect TP anns
     # (dictionary keyed by TP ann ID)

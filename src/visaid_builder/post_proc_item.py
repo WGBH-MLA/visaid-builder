@@ -151,7 +151,9 @@ def run_post( item:dict,
     #
     # Perform foundational processing of MMIF file
     #
-    
+
+    print(ins + "Attempting to process MMIF into SWT scene list...")
+
     # Open MMIF and start processing
     mmif_path = item["mmif_paths"][-1]
     with open(mmif_path, "r") as file:
@@ -163,9 +165,10 @@ def run_post( item:dict,
     tp_view_id, tf_view_id = proc_swt.get_swt_view_ids(usemmif)
     td_view_id = proc_swt.get_td_view_id(usemmif)
 
-    # call SWT MMIF processors to get a table of time frames
+    #print("**** TD view ID: " + str(td_view_id) ) #DIAG
+    #print("**** smolvc version: " + proc_swt.get_CLAMS_app_ver(usemmif, td_view_id) ) #DIAG
 
-    print(ins + "Attempting to process MMIF into SWT scene list...")
+    # call SWT MMIF processors to get a table of time frames
 
     tfsd = proc_swt.tfsd_from_mmif( usemmif, 
                                     tp_view_id,
@@ -211,6 +214,9 @@ def run_post( item:dict,
             movls = sorted(overlaps, key=lambda t:t["dur"], reverse=True)
             movl = movls[0]
             print(ins + f'  * Max overlap at {lilhelp.tconv(movl["start"])} ({movl["start"]} ms) for {lilhelp.tconv(movl["dur"])} ({movl["dur"]} ms).')
+        
+        num_td_scenes = len( [ t for t in tfsd if t["text"] ] )
+        print(ins + "  * Scenes with a TextDocument annotation: " + str(num_td_scenes) )
 
     # Create an adjusted TimeFrame table (with scenes added and/or removed)
     if pp_params["adj_tfs"] and final_time is not None:
@@ -475,6 +481,13 @@ def run_post( item:dict,
         if not cf.get("flat_dir"):
             cataids_dir += "/" + artifact
 
+        if cf["prompts_dir"]:
+            prompts_dir = cf["prompts_dir"]
+        elif cf["config_dir"]:
+            prompts_dir = cf["config_dir"]
+        else:
+            prompts_dir = None
+
         cataid_path = None
         cataid_problems = []
         cataid_infos = []
@@ -492,7 +505,7 @@ def run_post( item:dict,
                 proc_swt_params=proc_swt_params,
                 cataid_params=cataid_params,
                 mmif_metadata_str=mmif_metadata_str,
-                prompts_dir=cf["config_dir"]
+                prompts_dir=prompts_dir
                 )
         except Exception as e:
             print(ins + "Creation of cataid failed.")
