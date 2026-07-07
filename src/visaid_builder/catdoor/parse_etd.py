@@ -324,6 +324,8 @@ def parse_catear_lines ( lines:list, asset_id:str = None ) -> dict:
     Takes a list of lines of text.
     Returns a dictionary where the keys are in the list of valid catears.
     The value of each key is a string value (not a list).
+
+    For catears for which not value is supplied, the value is the empty string.
     """
 
     catear_data = {}

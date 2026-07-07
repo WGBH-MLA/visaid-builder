@@ -117,10 +117,15 @@ def main():
         "ams-con-full"
     ]
 
+    cmd_description = 'Outputs information from a collection of cataid output (catout) files.\n\n'
+    cmd_description += 'Valid output types:\n'
+    for t in output_types:
+        cmd_description += f"   {t}\n"
+
     parser = argparse.ArgumentParser(
         prog='catdoor',
-        description='Outputs information from a collection of cataid output (catout) files',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description=cmd_description,
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
         "paths", 
@@ -134,9 +139,10 @@ def main():
         help="Path to the output file")
     parser.add_argument(
         "-t", "--type",
+        metavar="TYPE",
         type=str,
         default="none",
-        help="Type of output to write")
+        help="Type of output" )
 
     args = parser.parse_args()
 

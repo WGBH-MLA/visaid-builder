@@ -16,6 +16,57 @@ import re
 # Key-specific parsing functions
 ############################################################################
 
+def parse_key_generic( v:str ) -> dict:
+    problems = []
+
+    if v.find("*") != -1:
+        problems.append("Key value contains asterisk")
+
+    d = {
+        "raw_value": v,
+        "problems": problems
+    }
+    return d
+
+
+def parse_key_genre( v:str ) -> dict:
+    problems = []
+
+    genre_str = v.strip()
+    if topic_str in GENRES:
+        genre = genres_str
+    else:
+        problems.append("Invalid genre")
+        genre = None
+
+    d = {
+        "raw_value": v,
+        "problems": problems,
+        "genre": genre
+    }
+    return d
+
+
+
+def parse_key_topic( v:str ) -> dict:
+    problems = []
+
+    topic_str = v.strip()
+    if topic_str in TOPICS:
+        topic = topics_str
+    else:
+        problems.append("Invalid topic")
+        topic = None
+
+    d = {
+        "raw_value": v,
+        "problems": problems,
+        "topic": topic
+    }
+    return d
+
+
+
 def parse_key_contrib( v: str ) -> dict:
     problems = []
 
@@ -61,11 +112,16 @@ def parse_key_contrib( v: str ) -> dict:
     return d
 
 
-def parse_key_generic( v:str ) -> dict:
+
+############################################################################
+# Catear-specific parsing functions
+############################################################################
+
+def parse_catear_generic( v:str ) -> dict:
     problems = []
 
-    if v.find("*") != -1:
-        problems.append("Key value contains asterisk")
+    if v.find("^") != -1:
+        problems.append("Catear value contains caret")
 
     d = {
         "raw_value": v,
@@ -73,10 +129,6 @@ def parse_key_generic( v:str ) -> dict:
     }
     return d
 
-
-############################################################################
-# Catear-specific parsing functions
-############################################################################
 
 def parse_catear_role( v:str ) -> dict:
     problems = []
@@ -95,19 +147,6 @@ def parse_catear_role( v:str ) -> dict:
     return d
 
 
-def parse_catear_generic( v:str ) -> dict:
-    problems = []
-
-    if v.find("^") != -1:
-        problems.append("Catear value contains caret")
-
-    d = {
-        "raw_value": v,
-        "problems": problems
-    }
-    return d
-
-
 
 ############################################################################
 # Vocabularies 
@@ -116,13 +155,14 @@ def parse_catear_generic( v:str ) -> dict:
 ############################################################################
 
 CATEARS = {
-    "home": parse_catear_generic,
-    "miss": parse_catear_generic,
-    "sens": parse_catear_generic,
-    "cw":   parse_catear_generic,
-    "note": parse_catear_generic,
-    "np":   parse_catear_generic,
-    "role": parse_catear_role
+    "home":   parse_catear_generic,
+    "miss":   parse_catear_generic,
+    "sens":   parse_catear_generic,
+    "cw":     parse_catear_generic,
+    "note":   parse_catear_generic,
+    "social": parse_catear_generic,
+    "np":     parse_catear_generic,
+    "role":   parse_catear_role
 }
 
 
@@ -134,6 +174,9 @@ KEYS = {
     "copyright-owner": parse_key_generic,
     "copr": parse_key_generic, 
     "date": parse_key_generic,
+    "genre": parse_key_generic,
+    "geo": parse_key_generic,
+    "topic": parse_key_generic,
     "prog-title": parse_key_generic,
     "series-title": parse_key_generic,
     "ep-title": parse_key_generic, 
@@ -144,8 +187,9 @@ KEYS = {
     "cam": parse_key_generic
 }
 
-# from locoal controlled vocabulary
+# from local controlled vocabulary
 # https://github.com/WGBH-MLA/ams/blob/develop/config/authorities/contributor_role.yml
+# (Should be updated to reflect any additions or changes to the above.)
 ROLES = [
     "Actor",
     "Adapter",
@@ -230,3 +274,86 @@ ROLES = [
     "Writer"
 ]
 
+# from local controlled vocabulary
+# https://github.com/WGBH-MLA/ams/blob/develop/config/authorities/topics.yml
+# (Should be updated to reflect any additions or changes to the above.)
+TOPICS = [
+    "Agriculture",
+    "Animals",
+    "Antiques and Collectibles",
+    "Architecture",
+    "Biography",
+    "Business",
+    "Consumer Affairs and Advocacy",
+    "Crafts",
+    "Dance",
+    "Economics",
+    "Education",
+    "Employment",
+    "Exercise",
+    "Fine Arts",
+    "Film and Television",
+    "Food and Cooking",
+    "Gardening",
+    "Geography",
+    "Global Affairs",
+    "Health",
+    "History",
+    "Holiday",
+    "Home Improvement",
+    "Humor",
+    "Journalism",
+    "Law Enforcement and Crime",
+    "LGBTQ",
+    "Literature",
+    "Local Communities",
+    "Medicine",
+    "Military Forces and Armaments",
+    "Music",
+    "Nature",
+    "News",
+    "Parenting",
+    "Performing Arts",
+    "Philosophy",
+    "Politics and Government",
+    "Psychology",
+    "Public Affairs",
+    "Race and Ethnicity",
+    "Religion",
+    "Science",
+    "Social Issues",
+    "Spanish Language",
+    "Sports",
+    "Technology",
+    "Theater",
+    "Transportation",
+    "Travel",
+    "War and Conflict",
+    "Weather",
+    "Women"    
+]
+
+# from local controlled vocabulary
+# https://github.com/WGBH-MLA/ams/blob/develop/config/authorities/genre.yml
+# (Should be updated to reflect any additions or changes to the above.)
+GENRES  = [
+    "Call-in",
+    "Children's",
+    "Debate",
+    "Documentary",
+    "Drama",
+    "Educational",
+    "Event Coverage",
+    "Fundraiser",
+    "Game Show",
+    "Instructional",
+    "Interview",
+    "Magazine",
+    "News Report",
+    "Performance",
+    "Promo",
+    "Public Service Announcement",
+    "Recorded Music",
+    "Special",
+    "Talk Show"
+]
