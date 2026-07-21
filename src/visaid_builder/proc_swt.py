@@ -342,7 +342,7 @@ def tfsd_from_mmif( usemmif:Mmif,
     for ann in tf_view.get_annotations(AnnotationTypes.TimeFrame):
         tf = {}
         tf["tf_id"] = ann.get_property("id")
-        tf["tf_label"] = ann.get_property("frameType")
+        tf["tf_label"] = ann.get_property("label")
         
         # iterate through target TPs to get start time and end time
         tf["start"] = 36000000 # 10 hours
