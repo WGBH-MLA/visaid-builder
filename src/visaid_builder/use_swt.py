@@ -76,6 +76,35 @@ def proc_display(mmif_path:str):
 
 
 
+def proc_raw_display(mmif_path:str):
+    """
+    This function pretty prints the full dictionary of simple table of TimeFrame annotations from the MMIF file.
+
+    It is one of the procedures conditionally called by the main() function.
+    """
+
+    # Load up the MMIF serialization from a MMIF file
+    with open(mmif_path, "r") as usefile:
+        mmif_str = usefile.read()
+
+    usemmif = Mmif(mmif_str)
+
+    logging.info("Attempting to process MMIF into a scene list...")
+
+    # Get the right views
+    tp_view_id, tf_view_id = proc_swt.get_swt_view_ids(usemmif)
+    td_view_id = proc_swt.get_td_view_id(usemmif)
+
+    # create TimeFrame table from the serialized MMIF
+    tfsd = proc_swt.tfsd_from_mmif( usemmif, 
+                                    tp_view_id,
+                                    tf_view_id,
+                                    td_view_id )
+
+    pprint(tfsd) #DIAG
+
+
+
 def proc_visaid( mmif_path:str, 
                  video_path:str, 
                  visaid_path:str=None, 
@@ -249,6 +278,8 @@ Creates useful data artifacts from the output of the SWT detection CLAMS app.
         help="File path for the video file.  If this is not passed in, the path will be copied from the location in the MMIF file.  If just a directory path is provided, the full file path will be inferred from that and the MMIF file.")
     parser.add_argument("-d", "--display", action="store_true",
         help="Output a summary index of TimeFrames from MMIF")
+    parser.add_argument("-r", "--raw-display", action="store_true",
+        help="Output a the raw dicionarty of the MMIF TimeFrame annotations")
     parser.add_argument("-v", "--visaid", action="store_true",
         help="Create an HTML visual index (visaid) of TimeFrames (requires video file)")
     parser.add_argument("-s", "--stdout", action="store_true",
@@ -270,6 +301,7 @@ Creates useful data artifacts from the output of the SWT detection CLAMS app.
         warn = False
     else:
         display = args.display
+        raw_display = args.raw_display
         visaid = args.visaid
 
     # Validate non-boolean  arguments
@@ -318,6 +350,9 @@ Creates useful data artifacts from the output of the SWT detection CLAMS app.
 
     if display:
         proc_display(mmif_path)
+
+    if raw_display:
+        proc_raw_display(mmif_path)
 
     if visaid:
         if cust_path:
