@@ -65,6 +65,8 @@ PROC_SWT_DEFAULTS = { "default_to_none": True,
                       "include_first_time": False,
                       "include_final_time": False }
 
+SUBSAMPLE_LABEL_SUFFIX = " - - -"
+
 
 def get_swt_view_ids(usemmif:Mmif):
     """
@@ -402,6 +404,14 @@ def adjust_tfsd( tfsd_in:list,
     The data structure for the table output is the same as in the input `tfsd` table.
 
     Ajdustments are made on the basis of the parameter values passed in.
+
+    Primary functionality is to
+      - include only certain scene types
+      - exclude certain scene types
+      - add a scene for the first frame checked
+      - add a scene for the last frame checked
+      - sample gaps between labeled scenes
+      - sub-sample long scenes
     """
 
     # Make a (shallow) copy of the input list, so not to alter it
@@ -609,10 +619,11 @@ def adjust_tfsd( tfsd_in:list,
                 
                 for _ in range(num_subsamples):
                     subsample_id = tf["tf_id"] + "_s_" + str(len(subsamples))
-                    subsample_label = tf["tf_label"] + " - - -"
+                    subsample_label = tf["tf_label"] + SUBSAMPLE_LABEL_SUFFIX
                     subsample_start = next_start
                     subsample_end = next_start + subsample_dur
                     subsample_rep = next_start + ( subsample_dur // 2 )
+                    subsample_text = tf["text"]
 
                     subsample = {
                         "tf_id": subsample_id,
@@ -623,7 +634,7 @@ def adjust_tfsd( tfsd_in:list,
                         "tp_label": None,
                         "tp_id": None,
                         "td_id": None,
-                        "text": None }
+                        "text": subsample_text }
                     subsamples.append(subsample)
 
                     next_start = subsample_end

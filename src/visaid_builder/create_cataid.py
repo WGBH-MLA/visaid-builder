@@ -28,6 +28,7 @@ from titlecase import titlecase
 __version__ = version("visaid_builder")
 from . import lilhelp
 from . import catification_prompts as cp
+from .proc_swt import SUBSAMPLE_LABEL_SUFFIX
 
 try:
     import tomllib  # in standard library fo Python 3.11+
@@ -64,6 +65,7 @@ SPECIAL_SCENE_TYPES = [ "first frame checked",
                         "last frame checked", 
                         "unlabeled sample"] 
 
+AI_CACHE = {}
 
 def catify_text( raw_text:str, 
                  tf_label:str, 
@@ -73,6 +75,9 @@ def catify_text( raw_text:str,
     """
     Transform raw text as appropriate for cataloging.
     """
+
+    global AI_CACHE
+
     if custom_prompts:
         try:
             system_prompt = custom_prompts["system_prompt"]
@@ -85,20 +90,33 @@ def catify_text( raw_text:str,
         system_prompt = cp.system_prompt
         scene_prompts = cp.scene_prompts
 
+    prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
     new_text = None
     fallback = False
-    if use_ai and tf_label in scene_prompts :
-        try:
-            new_text = ai.analyze_sample( scene_prompts[tf_label], 
-                                          raw_text,
-                                          system_prompt=system_prompt,
-                                          max_tokens=100,
-                                          deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
-        except Exception as e:
-            print("Warning: AI helper failed for `raw text`:")
-            print(raw_text)
-            print(e)
-            fallback = True
+
+    if use_ai and prompt_scene_label in scene_prompts :
+
+        # first check AI_CACHE for this prompt and response
+        if (prompt_scene_label, raw_text) in AI_CACHE:
+            new_text = AI_CACHE[(prompt_scene_label, raw_text)]
+
+        # call the AI helpers
+        else:
+            try:
+                new_text = ai.analyze_sample( scene_prompts[prompt_scene_label], 
+                                            raw_text,
+                                            system_prompt=system_prompt,
+                                            max_tokens=100,
+                                            deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
+                
+                # insert response into AI_CACHE
+                AI_CACHE[(prompt_scene_label, raw_text)] = new_text
+
+            except Exception as e:
+                print("Warning: AI helper failed for `raw text`:")
+                print(raw_text)
+                print(e)
+                fallback = True
 
         if not new_text:
             fallback = True
