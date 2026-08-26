@@ -34,7 +34,7 @@ def map_contrib_key_val( v:str, tp_time ) -> dict:
         "contributor": d["name_normalized"],
         "annotation": None,
         "start_time": tp_secs,
-        "time_annotation": "Cataid Scene", 
+        "time_annotation": "Cataid Appearance", 
         "affiliation": None,
         "affiliation_annotation": aff_ann,
         "contributor_role": role,
@@ -63,7 +63,7 @@ def map_chyron_sec( r:dict ) -> dict:
         "contributor": r["etd_data"]["chyron_data"]["name_normalized"], 
         "annotation": r["etd_data"]["chyron_data"]["name_as_written"],  
         "start_time": tp_secs, 
-        "time_annotation": "Cataid Scene", 
+        "time_annotation": "Cataid Appearance", 
         "affiliation": None, 
         "affiliation_annotation": aff_ann, 
         "contributor_role": role,
@@ -148,9 +148,9 @@ def make_full_contrib_ingest( outtable ):
             "contributor_role",
             "contributor_role_annotation"
         ]
-        contribution_cols = min_contribution_cols
+        # contribution_cols = min_contribution_cols
         # contribution_cols = exp_contribution_cols
-        # contribution_cols = all_contribution_cols
+        contribution_cols = all_contribution_cols
 
         # create enough column headers for everyone from each item
         csv_header_row = ["Asset", "Asset.id"]
