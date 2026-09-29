@@ -47,8 +47,8 @@ def tablify_catouts( paths:list ) -> list:
     "img_fname"               - string: KSL-style filename for the still image
     "img_data_uri"            - string: Base64 encoded image beginning "data:image/jpeg;base64,"
     "aid_text"                - string: Extracted text as appearing on cataid
-    "etd_text"                - string: Edited text document from user
-    "etd_data":               - dictionary (defined in parse_etd)
+    "etd_text"                - string: Edited text document as entered by user
+    "etd_data":               - dictionary (defined in `parse_etd` module)
     """
 
     catout_table = []
@@ -82,7 +82,7 @@ def tablify_catouts( paths:list ) -> list:
                     r["asset_id"]     = catoutd["asset_id"]
                     r["cataid_id"]    = catoutd["cataid_id"]
                     r["cataid_ver"]   = catoutd["cataid_ver"]
-                    r["cataloger"]    = catoutd["cataloger"]
+                    r["cataloger"]    = catoutd["cataloger"].upper()
                     r["export_date"]  = catoutd["export_date"].split("T")[0]
                     r["tp_time"]      = int(ei["tp_time"])
                     r["tf_label"]     = ei["tf_label"]
@@ -105,22 +105,22 @@ def tablify_catouts( paths:list ) -> list:
 
 def main():
 
-    output_types = [
-        "none",
-        "html-etd",
-        "html-chy",
-        "html-exp",
-        "html-key",
-        "html-prob",
-        "html-con",
-        "ams-con-basic",
-        "ams-con-full"
-    ]
+    output_types = {
+        "none":      "process catouts but write no files",
+        "html-etd":  "show the raw editor text doc for each frames",
+        "html-chy":  "show data values from chyron-style editor text docs" ,
+        "html-key":  "show data values from key-value-style editor text docs",
+        "html-exp":  "",
+        "html-prob": "",
+        "html-con":  "",
+        "ams-con-basic": "",
+        "ams-con-full":  "",
+    }
 
     cmd_description = 'Outputs information from a collection of cataid output (catout) files.\n\n'
     cmd_description += 'Valid output types:\n'
     for t in output_types:
-        cmd_description += f"   {t}\n"
+        cmd_description += f"  {t}{' '*(15-len(t))}: {output_types[t]}\n"
 
     parser = argparse.ArgumentParser(
         prog='catdoor',

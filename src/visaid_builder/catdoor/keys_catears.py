@@ -1,10 +1,15 @@
 """
 keys_catears.py
 
-Vocabulary and logic for specific catears and keys.
+Logic and vocabulary for specific catears and keys.
 
 The logic here comes into play only after the "etd_text" has already
 been parsed into keys (catear or normal) and their values.
+
+Each of these functions returns a dictionary with two standard elements: 
+"problems" and "raw_value".  Additional elements are specific to the values
+relevant to that particular catear or ETD key.
+
 
 More key-specific and catear-specific fucntions may be added over time
 to accomodate different types of data.
@@ -12,11 +17,35 @@ to accomodate different types of data.
 
 import re
 
+
+def nterm( v:str ) -> str:
+    """
+    Normalizes a term in a controlled list of terms.
+
+    Takes a string representation of a term intended to be a controlled value 
+    and normalizes it, making it suitable for lookups in lists of equivalently
+    normalized representations of controlled terms.
+    """
+    # remove any non-alphanumerics
+    v = "".join(c for c in v if c.isalnum())
+
+    return v.lower()
+
+
 ############################################################################
 # Key-specific parsing functions
+# These are values in the dictionary below and need to be declared before
+# that dictionary is created.
 ############################################################################
 
 def parse_key_generic( v:str ) -> dict:
+    """
+    Generic key parser.
+    Keys in the returned dict:
+      - raw_value
+      - problems
+    """
+
     problems = []
 
     if v.find("*") != -1:
@@ -30,11 +59,17 @@ def parse_key_generic( v:str ) -> dict:
 
 
 def parse_key_genre( v:str ) -> dict:
+    """
+    Simple parser for 'genre' key.
+    Keys in the returned dict:
+      - raw_value
+      - problems
+      - genre
+    """
     problems = []
 
-    genre_str = v.strip()
-    if topic_str in GENRES:
-        genre = genres_str
+    if nterm(v) in GENRES_d:
+        genre = GENRES_d[nterm(v)]
     else:
         problems.append("Invalid genre")
         genre = None
@@ -49,11 +84,17 @@ def parse_key_genre( v:str ) -> dict:
 
 
 def parse_key_topic( v:str ) -> dict:
+    """
+    Simple parser for 'topic' key.
+    Keys in the returned dict:
+      - raw_value
+      - problems
+      - topic
+    """    
     problems = []
 
-    topic_str = v.strip()
-    if topic_str in TOPICS:
-        topic = topics_str
+    if nterm(v) in TOPICS_d:
+        topic = TOPICS_d[nterm(v)]
     else:
         problems.append("Invalid topic")
         topic = None
@@ -68,6 +109,21 @@ def parse_key_topic( v:str ) -> dict:
 
 
 def parse_key_contrib( v: str ) -> dict:
+    """
+    Custom parser for 'contrib' key.
+
+    Parses values from lines like these:
+        `*contrib: Manahan, Kent (Anchor) ^^home`
+        `*contrib: Furber, Lincoln (Producer) ^^home ^^np`
+
+    Keys in the returned dict:
+      - raw_value
+      - problems
+      - name_normalized
+      - role
+      - home (bool) 
+      - pictured (bool)
+    """
     problems = []
 
     # Find the role in parenetheses
@@ -79,8 +135,8 @@ def parse_key_contrib( v: str ) -> dict:
 
         # role is what is in parentheses
         role_str = rolematch.group(1).strip()
-        if role_str in ROLES:
-            role = role_str
+        if nterm(role_str) in ROLES_d:
+            role = ROLES_d[nterm(role_str)]
         else:
             problems.append("Invalid role")
             role = None
@@ -133,8 +189,8 @@ def parse_catear_generic( v:str ) -> dict:
 def parse_catear_role( v:str ) -> dict:
     problems = []
 
-    if v.strip() in ROLES:
-        role = v.strip()
+    if nterm(v) in ROLES_d:
+        role = ROLES_d[nterm(v)]
     else:
         problems.append("Invalid role")
         role = None
@@ -162,29 +218,33 @@ CATEARS = {
     "note":   parse_catear_generic,
     "social": parse_catear_generic,
     "np":     parse_catear_generic,
-    "role":   parse_catear_role
+    "role":   parse_catear_role,
 }
 
 
 KEYS = {
     "contrib": parse_key_contrib,
+    "prod": parse_key_generic,
+    "dir": parse_key_generic,
+    "cam": parse_key_generic,
     "air": parse_key_generic,
     "rec": parse_key_generic,
+    "date": parse_key_generic,
     "copyright-year": parse_key_generic,
     "copyright-owner": parse_key_generic,
     "copr": parse_key_generic, 
-    "date": parse_key_generic,
-    "genre": parse_key_generic,
-    "geo": parse_key_generic,
-    "topic": parse_key_generic,
     "prog-title": parse_key_generic,
     "series-title": parse_key_generic,
     "ep-title": parse_key_generic, 
-    "title": parse_key_generic,
     "ep-no": parse_key_generic,
-    "dir": parse_key_generic,
-    "prod": parse_key_generic,
-    "cam": parse_key_generic
+    "title": parse_key_generic,
+    "prog-desc": parse_key_generic,
+    "ep-desc": parse_key_generic, 
+    "genre": parse_key_genre,
+    "topic": parse_key_topic,
+    "geo": parse_key_generic,
+    "bumper": parse_key_generic,
+    "performance": parse_key_generic,
 }
 
 # from local controlled vocabulary
@@ -271,8 +331,11 @@ ROLES = [
     "Video Engineer",
     "Vocalist",
     "Voiceover Artist",
-    "Writer"
+    "Writer",
 ]
+# create a dictionary for lower-case validation
+ROLES_d = { nterm(k): k for k in set(ROLES) }
+
 
 # from local controlled vocabulary
 # https://github.com/WGBH-MLA/ams/blob/develop/config/authorities/topics.yml
@@ -330,8 +393,11 @@ TOPICS = [
     "Travel",
     "War and Conflict",
     "Weather",
-    "Women"    
+    "Women",
 ]
+# create a dictionary for lower-case validation
+TOPICS_d = { nterm(k): k for k in set(TOPICS) }
+
 
 # from local controlled vocabulary
 # https://github.com/WGBH-MLA/ams/blob/develop/config/authorities/genre.yml
@@ -355,5 +421,7 @@ GENRES  = [
     "Public Service Announcement",
     "Recorded Music",
     "Special",
-    "Talk Show"
+    "Talk Show",
 ]
+# create a dictionary for lower-case validation
+GENRES_d = { nterm(k): k for k in set(GENRES) }

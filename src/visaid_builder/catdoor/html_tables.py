@@ -42,12 +42,21 @@ def stringify_catear_data( d:dict) -> str:
     return s
 
 
-def stringify_keyed_data( d:dict) -> str:
+def htmlify_keyed_data( d:dict) -> str:
+    s = ""
+    for k in d:
+        for v in d[k]:
+            for kv in KEYS[k](v):
+                s += f"<strong>{k}→ {kv}</strong>:\t{KEYS[k](v)[kv]}<br>\n"
+            s += f"<br>\n"
+    return s
+
+
+def stringify_keys_from_keyed_data( d:dict) -> str:
     s = ""
     for k in d:
         for v in d[k]:
             s += ("*" + k + "\n")
-            s += json.dumps( KEYS[k](v), indent=2 ) + "\n"
     return s
 
 
@@ -96,6 +105,7 @@ def make_our_first_table( outtable ):
     <script>
         $(document).ready(function() {
             $('#catdoor').DataTable({
+                pageLength: 100,
                 // layout: defines where the facets (searchPanes) appear
                 layout: {
                     top1: {
@@ -137,10 +147,12 @@ def make_chyron_review_table( outtable ):
 
     fields1 = [ "asset_id",
                 "cataloger",
-                "export_date",
-                "tp_time" ]
-    fields2 = [ "name_normalized",
-                "person_attributes" ]
+                "tp_time", 
+                ]
+    fields2 = [ "name_as_written",
+                "name_normalized",
+                "person_attributes",
+                 ]
 
     html_css = HTML_CSS
 
@@ -181,6 +193,7 @@ def make_chyron_review_table( outtable ):
     <script>
         $(document).ready(function() {
             $('#catdoor').DataTable({
+                pageLength: 100,
                 // layout: defines where the facets (searchPanes) appear
                 layout: {
                     top1: {
@@ -196,7 +209,7 @@ def make_chyron_review_table( outtable ):
                         searchPanes: {
                             show: true
                         },
-                        targets: [0, 1, 2, 5, 7]
+                        targets: [0, 1, 5, 7]
                     },
                     {
                         searchPanes: {
@@ -222,9 +235,11 @@ def make_keyed_data_table( outtable ):
 
     fields1 = [ "asset_id",
                 "cataloger",
-                "export_date",
-                "tp_time" ]
-    fields2 = [ "keyed_data" ]
+                "tp_time", 
+                ]
+    fields2 = [ "keys",
+                "keyed_data",
+                ]
 
     html_css = HTML_CSS
 
@@ -250,8 +265,8 @@ def make_keyed_data_table( outtable ):
             tr += f"<td>{r[f]}</td>"
         #tr += f"<td>X</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        for f in fields2:
-            tr += f"<td><pre>{stringify_keyed_data(r['etd_data']['keyed_data'])}</pre></td>"
+        tr += f"<td><pre>{stringify_keys_from_keyed_data(r['etd_data']['keyed_data'])}</pre></td>"
+        tr += f"<td>{htmlify_keyed_data(r['etd_data']['keyed_data'])}</td>"
         tr += "\n</tr>\n"
         rows += tr
 
@@ -261,6 +276,7 @@ def make_keyed_data_table( outtable ):
     <script>
         $(document).ready(function() {
             $('#catdoor').DataTable({
+                pageLength: 100,
                 // layout: defines where the facets (searchPanes) appear
                 layout: {
                     top1: {
@@ -276,7 +292,7 @@ def make_keyed_data_table( outtable ):
                         searchPanes: {
                             show: true
                         },
-                        targets: [0, 1, 2]
+                        targets: [0, 1, 4]
                     },
                     {
                         searchPanes: {
@@ -339,6 +355,7 @@ def make_etd_table( outtable ):
     <script>
         $(document).ready(function() {
             $('#catdoor').DataTable({
+                pageLength: 100,
                 // layout: defines where the facets (searchPanes) appear
                 layout: {
                     top1: {
@@ -433,6 +450,7 @@ def make_exp_table( outtable ):
     <script>
         $(document).ready(function() {
             $('#catdoor').DataTable({
+                pageLength: 100,
                 // layout: defines where the facets (searchPanes) appear
                 layout: {
                     top1: {
@@ -517,6 +535,7 @@ def make_prob_table( outtable ):
     <script>
         $(document).ready(function() {
             $('#catdoor').DataTable({
+                pageLength: 100,
                 // layout: defines where the facets (searchPanes) appear
                 layout: {
                     top1: {
@@ -642,6 +661,7 @@ def make_contrib_ingest_table( outtable ):
     <script>
         $(document).ready(function() {
             $('#catdoor').DataTable({
+                pageLength: 100,
                 // layout: defines where the facets (searchPanes) appear
                 layout: {
                     top1: {

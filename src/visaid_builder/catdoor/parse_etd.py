@@ -17,37 +17,41 @@ from .keys_catears import KEYS, CATEARS
 def parse_etd( etd_text:str, asset_id:str = None ) -> list:
     """
     Top-level parsing logic of human edited/entered values.
-    Takes a string of raw text as input.
-    Returns a list of dictionaries.
+    Takes a string of raw editor text as input.
+    Divides it into sections, if the user used the `+++` seperator.
+    Returns a list of dictionaries, one for each section.
 
     Typically, the returned list has just a single dictionary, but if the 
-    user has used the "+++" syntax to multiplex the editor, there may be more
+    user has used the "+++" separator to multiplex the editor, there may be more
     than one.
 
     This function divides muliplexed editor text, uses a heuristic to choose
     the appropriate parsing, and then calls the appropriate parsing functions.
-    It then returns a list of the results of each of those parsing functions.
 
     Keys in each dictionary returned:
        "problem" - boolean indicating any problem in parsing the etd data
        "etd_type" - the data convention (and type of parsing performed)
                     values: 'empty', 'keyed', 'chyron', 'catears-only', 'other'
-       "chyron_data" - a dictionary of chyron data with 3 keys:
+       "chyron_data" - either an empty dict or a dict with 3 keys with string values:
                     "name_as_written", "name_normalized", "person_attributes"
-       "keyed_data" - a dictionary of whatever keyed data was in a section, 
-                    with keys limited to values in `KEYS`
-       "catear_data" - a dictionary of whatever catear keyed data was in a 
-                    section, with keys limited to values in `CATEARS`
+       "keyed_data" - either an empty dict or a dict of whatever valid keyed data 
+                    was in the editor text section.  The value for each valid key 
+                    is structured as another dict which always includes keys, 
+                    'raw_value' and 'problems', and other keys relevant to the key
+                    entered in the editor.  
+       "catear_data" - a dict (possibly empty) of whatever catear keyed data was in
+                     a section (with keys limited to values in `CATEARS`)
     """
 
-    # allow multiple records per etd text
+    # Multiple records per etd text
+    # Each record is the structured data from a section
     etd_recs = []
 
-    # divide multiplexed editor text and strip surrounding whitespace
+    # Divide multiplexed editor text and strip surrounding whitespace
     etd_secs = [ s.strip() for s in etd_text.split("\n+++") if s.strip() ]
 
-    # for each section use the appropriate parser
-    # The parser calls other functions as appropriate and reports errors
+    # For each section, use the appropriate parser.
+    # The parser calls other functions, as appropriate, and reports errors
     for sec in etd_secs:
 
         lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
@@ -81,10 +85,10 @@ def parse_etd( etd_text:str, asset_id:str = None ) -> list:
     return etd_recs
 
 
-
 def rec_problem( txt:str, asset_id:str = None, msg:str = None ) -> None:
     """
-    Standard routine when encountering invalid etd data.
+    Standard routine that should be called by other functions when 
+    encountering invalid etd data.
     For now, just prints out an informative error message.
     """
     print()
@@ -92,11 +96,14 @@ def rec_problem( txt:str, asset_id:str = None, msg:str = None ) -> None:
         msg = "Invalid etd data"
 
     if asset_id:
-        print(f"{asset_id}: {msg}")
+        print(f"Item `{asset_id}`; {msg}:")
     else:
-        print(msg)
+        print(f"{msg}:")
 
-    print(f"```\n{txt}\n```\n")
+    print("   ```")
+    for line in txt.splitlines():
+        print(f"   {line}")
+    print("   ```\n")
 
 
 ############################################################################
@@ -127,8 +134,8 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
     for each key.
 
     Parse catears lines as catear key-value pairs.
-    Catears in the values of keyed data lines are not handled here
-    and are left to whatever is parsing values.
+    (Catears in the values of keyed data lines are not handled here
+    and are left to the function that parses that key.)
     """
     problem = False
 
