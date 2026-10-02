@@ -1,18 +1,24 @@
 """
 parse_etd.py
 
-Structural/syntactic parsing logic for the editor text document (etd) field 
-that is part of a catout entry.
+Provides one public function: `parse_etd` 
 
-The logic here assumes specific high level rules and conventions for 
+Handeles structural/syntactic parsing logic for the editor text document 
+(etd) field  that is part of a catout entry.
+
+The parsing logic here assumes and encodes specific high level rules for 
 structuring the data in the editor fields of cataids.
 
-It assumes the vocabulary from `keys_catears`, and it uses the key-specific
-or catear-specific functions there to validate values.  
+It assumes the vocabulary from the `keys_catears` module, and it uses the 
+key-specific or catear-specific functions in that module to validate values.  
+However, it does not restructure any of those values (which are left as 
+strings).  Those functions may need to be called again by downstream 
+consumers of the data that comes out of `parse_etd`.
 """
 
-from .keys_catears import KEYS, CATEARS
+__all__ = ['parse_etd']
 
+from .keys_catears import KEYS, CATEARS, CHYRON_SEC_CATEARS, GENERAL_CATEARS
 
 def parse_etd( etd_text:str, asset_id:str = None ) -> list:
     """
@@ -59,25 +65,25 @@ def parse_etd( etd_text:str, asset_id:str = None ) -> list:
 
         if not len(lines):
             # no lines -> empty section
-            r = parse_sec_empty(sec, asset_id)
+            r = _parse_sec_empty(sec, asset_id)
 
         elif lines[0][:1] == "*":
             # first line begins with asterisk -> keyed data section
-            r = parse_sec_keyed(sec, asset_id)
+            r = _parse_sec_keyed(sec, asset_id)
 
         elif lines[0][:2] == "^^":
             # first line begins with catears -> ears-only section
-            r = parse_sec_ears_only(sec, asset_id)
+            r = _parse_sec_ears_only(sec, asset_id)
 
         elif ( len(lines) >= 2 and
                lines[0] not in ear_lines and
                lines[1] not in ear_lines ):
             # at least two non-catears lines -> chyron data section
-            r = parse_sec_chyron(sec, asset_id)
+            r = _parse_sec_chyron(sec, asset_id)
 
         else:
             # none of the above -> other etd value
-            r = parse_sec_other(sec, asset_id)
+            r = _parse_sec_other(sec, asset_id)
 
         if r:
             etd_recs.append(r)
@@ -85,10 +91,15 @@ def parse_etd( etd_text:str, asset_id:str = None ) -> list:
     return etd_recs
 
 
-def rec_problem( txt:str, asset_id:str = None, msg:str = None ) -> None:
+############################################################################
+# General diagnostic helper function
+############################################################################
+
+def _rec_problem( txt:str, asset_id:str = None, msg:str = None ) -> None:
     """
     Standard routine that should be called by other functions when 
     encountering invalid etd data.
+
     For now, just prints out an informative error message.
     """
     print()
@@ -96,7 +107,7 @@ def rec_problem( txt:str, asset_id:str = None, msg:str = None ) -> None:
         msg = "Invalid etd data"
 
     if asset_id:
-        print(f"Item `{asset_id}`; {msg}:")
+        print(f"Item `{asset_id}`; {msg}")
     else:
         print(f"{msg}:")
 
@@ -110,16 +121,17 @@ def rec_problem( txt:str, asset_id:str = None, msg:str = None ) -> None:
 # Section parsing functions
 ############################################################################
 
-def parse_sec_empty( sec: str, asset_id:str = None ) -> dict:
+def _parse_sec_empty( sec: str, asset_id:str = None ) -> dict:
     """
     Parse as empty.
     (I.e., no parsing)
     """
 
-    rec_problem(sec, asset_id, msg="Empty etd section")
+    _rec_problem(sec, asset_id, msg="Empty editor section")
+    problem = True
 
     r = {}
-    r["problem"] = True
+    r["problem"] = problem
     r["etd_type"] = "empty"
     r["chyron_data"] = {}
     r["keyed_data"] = {}
@@ -127,8 +139,59 @@ def parse_sec_empty( sec: str, asset_id:str = None ) -> dict:
     return r
 
 
+def _parse_sec_other( sec: str, asset_id:str = None ) -> dict:
 
-def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
+
+    lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
+    ear_lines = [ l for l in lines if l[:2] == "^^" ]
+
+    catear_data, ce_problem = _parse_catear_lines(ear_lines, asset_id)
+    if ce_problem:
+        problem = True
+
+    # this kind of etd is invalid.
+    _rec_problem(sec, asset_id, "Skipping: Invalid section")
+    problem = True
+
+    r = {}
+    r["problem"] = problem
+    r["etd_type"] = "other"
+    r["chyron_data"] = {}
+    r["keyed_data"] = {}
+    r["catear_data"] = catear_data
+    return r
+
+
+def _parse_sec_ears_only( sec: str, asset_id:str = None ) -> dict:
+
+    problem = False
+
+    # get the non-empty lines
+    lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
+
+    # any line beginning with ^^ is an ears line
+    ear_lines = [ l for l in lines if l[:2] == "^^" ]
+
+    bad_lines = [ l for l in lines if l not in ear_lines ]
+
+    if bad_lines:
+        _rec_problem(sec, asset_id, "Warning: Ignoring extra text after catears")
+        problem = True
+
+    catear_data, ce_problem = _parse_catear_lines(ear_lines, asset_id)
+    if ce_problem:
+        problem = True
+
+    r = {}
+    r["problem"] = problem
+    r["etd_type"] = "catears-only"
+    r["chyron_data"] = {}
+    r["keyed_data"] = {}
+    r["catear_data"] = catear_data
+    return r
+
+
+def _parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
     """
     Parse bullet list lines as key-value pairs, with a list of values
     for each key.
@@ -156,14 +219,14 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
     bad_lines = [ l for l in lines if l not in (ear_lines + key_lines) ]
 
     if bad_lines or not key_lines:
-        rec_problem(sec, asset_id, "Invalid keyed information section")
+        _rec_problem(sec, asset_id, "Warning: Skipping invalid lines in keyed information section")
         problem = True
 
     # Even if there are bad lines, we'll still go ahead and try to extract 
     # information from valid keyed info lines or catears lines
     # dictionaries of keyed data
-    keyed_data, k_problem = parse_key_lines(key_lines, asset_id) 
-    catear_data, ce_problem = parse_catear_lines(ear_lines, asset_id)
+    keyed_data, k_problem = _parse_key_lines(key_lines, asset_id) 
+    catear_data, ce_problem = _parse_catear_lines(ear_lines, asset_id, etd_type='keyed')
 
     if k_problem or ce_problem:
         problem = True
@@ -178,7 +241,7 @@ def parse_sec_keyed( sec: str, asset_id:str = None ) -> dict:
 
 
 
-def parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
+def _parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
     """
     Parse as chyron data.
     (i.e., KSL Chyron note-4 conventions)
@@ -205,16 +268,23 @@ def parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
     else:
         chyron_data["person_attributes"] = None
 
+    # Do some checks so we can output warnings
     for k in ["name_as_written", "name_normalized", "person_attributes" ]:
         if chyron_data[k] is not None and chyron_data[k].find("^^") != -1:
-            rec_problem(sec, asset_id, "Catears in chyron data")
-            problem = True
-    
+            _rec_problem(sec, asset_id, "Warning: Catears appearing in in chyron data lines")
+            problem = True   
     if len(chyron_data["name_normalized"]) > len(chyron_data["name_as_written"]) + 2:
-        rec_problem(sec, asset_id, "Normalized name suspiciously long")
+        _rec_problem(sec, asset_id, "Warning: Normalized name suspiciously long")
+        problem = True
+    if chyron_data["name_normalized"].find(",") == -1:
+        _rec_problem(sec, asset_id, "Warning: Normalized name contains no comma")
+        problem = True
+    elif chyron_data["name_as_written"].find(chyron_data["name_normalized"].split(",")[0]) == -1:
+        _rec_problem(sec, asset_id, "Warning: Name as written doesn't include normalized surname")
         problem = True
 
-    catear_data, ce_problem = parse_catear_lines(ear_lines, asset_id)
+
+    catear_data, ce_problem = _parse_catear_lines(ear_lines, asset_id, etd_type="chyron")
     if ce_problem:
         problem = True
 
@@ -228,67 +298,23 @@ def parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
 
 
 
-def parse_sec_ears_only( sec: str, asset_id:str = None ) -> dict:
-
-    problem = False
-
-    # get the non-empty lines
-    lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
-
-    # any line beginning with ^^ is an ears line
-    ear_lines = [ l for l in lines if l[:2] == "^^" ]
-
-    bad_lines = [ l for l in lines if l not in ear_lines ]
-
-    if bad_lines:
-        rec_problem(sec, asset_id, "Cat ears but then extra")
-        problem = True
-
-    catear_data, ce_problem = parse_catear_lines(ear_lines, asset_id)
-    if ce_problem:
-        problem = True
-
-    r = {}
-    r["problem"] = problem
-    r["etd_type"] = "catears-only"
-    r["chyron_data"] = {}
-    r["keyed_data"] = {}
-    r["catear_data"] = catear_data
-    return r
-
-
-
-def parse_sec_other( sec: str, asset_id:str = None ) -> dict:
-
-    # this kind of etd is invalid.
-    rec_problem(sec, asset_id, "Invalid section")
-    problem = True
-
-    lines = [ s.strip() for s in sec.split("\n") if s.strip() ]
-    ear_lines = [ l for l in lines if l[:2] == "^^" ]
-
-    catear_data, ce_problem = parse_catear_lines(ear_lines, asset_id)
-    if ce_problem:
-        problem = True
-
-    r = {}
-    r["problem"] = problem
-    r["etd_type"] = "other"
-    r["chyron_data"] = {}
-    r["keyed_data"] = {}
-    r["catear_data"] = catear_data
-    return r
-
-
 ############################################################################
 # Line parsing functions
 ############################################################################
 
-def parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
+def _parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
     """
+    This function converts a list of keyed value lines (strings) into a dict
+    of valid keys and a list of values.
+
     Takes a list of lines of text.
     Returns a dictionary where the keys are in the list of valid keys.
     The value of each key is a list of string values.
+    Each string value is the (stripped) raw key text.
+
+    Note that the functions that are the values in the KEYS dictionary 
+    are called here only for validation of the data values.  Those functions
+    may need to be called downstream again for structuring values.
     """
 
     keyed_data = {}
@@ -302,7 +328,7 @@ def parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
 
         # validate key itself
         if k not in KEYS:
-            rec_problem(l, asset_id, "Invalid key")
+            _rec_problem(l, asset_id, f"Warning: Skipping invalid key '{k}'")
             problem = True
         
         # Validate value by calling the key-specific function in the dispatch table
@@ -310,12 +336,14 @@ def parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
         #  transformation peformed by the dispatch function.)
         elif KEYS[k]:
             ki = KEYS[k](v)
+
+            # register any problems
             if ki["problems"]:
                 message = ". ".join(ki["problems"])
-                rec_problem(l, asset_id, message)
+                _rec_problem(l, asset_id, message)
                 problem = True
             else:
-                # Key and value are valid.
+                # Record values only if there were no problems.
                 if k in keyed_data:
                     # Keys are repeatable.  Accumulate a list of values.
                     keyed_data[k].append(v)
@@ -326,14 +354,28 @@ def parse_key_lines ( lines:list, asset_id:str = None ) -> dict:
 
 
 
-def parse_catear_lines ( lines:list, asset_id:str = None ) -> dict:
+def _parse_catear_lines ( lines:list, 
+                          asset_id:str = None,  
+                          etd_type = None,
+                          ) -> dict:
     """
-    Takes a list of lines of text.
-    Returns a dictionary where the keys are in the list of valid catears.
-    The value of each key is a string value (not a list).
+    This function converts a list of catear lines (strings) into a dict
+    of valid catear data.  
 
-    For catears for which not value is supplied, the value is the empty string.
+    Takes a list of lines of text.
+    Returns a dictionary where the keys are in the list of valid catears, 
+    and the value for each key is a string value (not a list). For catears 
+    for which not value is supplied, the value is the empty string.
+
+    Note that the functions that are the values in the CATEARS dictionary 
+    are called here only for validation of the data values.  Those functions
+    may need to be called downstream again for structuring values.
     """
+
+    if etd_type == "chyron":
+        catear_dict = CATEARS
+    else:
+        catear_dict = GENERAL_CATEARS
 
     catear_data = {}
     problem = False
@@ -378,26 +420,26 @@ def parse_catear_lines ( lines:list, asset_id:str = None ) -> dict:
                 v = ""
             
             if invalid_catear:
-                rec_problem(l, asset_id, msg="Invalid catear line")
+                _rec_problem(l, asset_id, msg="Warning: Skipping invalid cat ear line")
                 problem = True
             else:
-                if k not in CATEARS:
-                    rec_problem(l, asset_id, msg="Invalid catear")
+                if k not in catear_dict:
+                    _rec_problem(l, asset_id, msg=f"Warning: Skipping cat ear not valid in editor type {etd_type}")
                     problem = True
 
                 # Validate value by calling the catear-specific function in the dispatch table
                 # (We're just going to check for problems discovered.  We are not using any
                 #  transformation peformed by the dispatch function.)
-                elif CATEARS[k]:
-                    ki = CATEARS[k](v)
+                elif catear_dict[k]:
+                    ki = catear_dict[k](v)
+                    # register any problems
                     if ki["problems"]:
                         message = ". ".join(ki["problems"])
-                        rec_problem(l, asset_id, message)
+                        _rec_problem(l, asset_id, message)
                         problem = True
-                    else:
-                        # Key and value are valid.
-                        # Unlike keys, catears are not repeatable.
-                        catear_data[k] = v 
+                    
+                    # unlike keys, for catears we save the value even if there was a problem
+                    catear_data[k] = v 
 
     return catear_data, problem
 

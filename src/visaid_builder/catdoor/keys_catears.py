@@ -177,7 +177,7 @@ def parse_catear_generic( v:str ) -> dict:
     problems = []
 
     if v.find("^") != -1:
-        problems.append("Catear value contains caret")
+        problems.append("Warning: Catear value contains caret")
 
     d = {
         "raw_value": v,
@@ -203,6 +203,21 @@ def parse_catear_role( v:str ) -> dict:
     return d
 
 
+def parse_catear_sens( v:str ) -> dict:
+    problems = []
+
+    if v.find("^") != -1:
+        problems.append("Warning: Catear value contains caret")
+
+    problems.append("Alert: Review content")
+
+    d = {
+        "raw_value": v,
+        "problems": problems
+    }
+    return d
+
+
 
 ############################################################################
 # Vocabularies 
@@ -210,17 +225,20 @@ def parse_catear_role( v:str ) -> dict:
 # expressed as dispatch tables or lists
 ############################################################################
 
-CATEARS = {
+CHYRON_SEC_CATEARS = {
     "home":   parse_catear_generic,
+    "np":     parse_catear_generic,
+    "role":   parse_catear_role,
+    "omit-attributes": parse_catear_sens,
+}
+GENERAL_CATEARS =  {
     "miss":   parse_catear_generic,
-    "sens":   parse_catear_generic,
+    "sens":   parse_catear_sens,
     "cw":     parse_catear_generic,
     "note":   parse_catear_generic,
     "social": parse_catear_generic,
-    "np":     parse_catear_generic,
-    "role":   parse_catear_role,
 }
-
+CATEARS = CHYRON_SEC_CATEARS | GENERAL_CATEARS
 
 KEYS = {
     "contrib": parse_key_contrib,
