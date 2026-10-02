@@ -106,15 +106,14 @@ def tablify_catouts( paths:list ) -> list:
 def main():
 
     output_types = {
-        "none":      "process catouts but write no files",
-        "html-etd":  "show the raw editor text doc for each frames",
-        "html-chy":  "show data values from chyron-style editor text docs" ,
-        "html-key":  "show data values from key-value-style editor text docs",
-        "html-exp":  "",
-        "html-prob": "",
-        "html-con":  "",
-        "ams-con-basic": "",
-        "ams-con-full":  "",
+        "none":     "Process catouts but write no files",
+        "html-etd": "Show the raw editor text for each frame recorded",
+        "html-chy": "Show data values from chyron-style editor text" ,
+        "html-key": "Show data values from key-value-style editor text",
+        "html-con": "Show data as would be in an AMS contributor ingest",
+        "html-atn": "Show just the frames that need attention",
+        "ams-con-basic": "Create CSV for AMS2 of barebones data values for contributors",
+        "ams-con-full":  "Create CSV for AMS2 of all supported data fields for contributors",
     }
 
     cmd_description = 'Outputs information from a collection of cataid output (catout) files.\n\n'
@@ -191,15 +190,13 @@ def main():
     if args.type == "html-etd":
         out_str = html_tables.make_etd_table(catout_table)
     elif args.type == "html-chy":
-        out_str = html_tables.make_chyron_review_table(catout_table)
-    elif args.type == "html-exp":
-        out_str = html_tables.make_exp_table(catout_table)
+        out_str = html_tables.make_chyron_data_table(catout_table)
     elif args.type == "html-key":
         out_str = html_tables.make_keyed_data_table(catout_table)
-    elif args.type == "html-prob":
-        out_str = html_tables.make_prob_table(catout_table)
     elif args.type == "html-con":
         out_str = html_tables.make_contrib_ingest_table(catout_table)
+    elif args.type == "html-atn":
+        out_str = html_tables.make_attention_table(catout_table)
     elif args.type == "ams-con-basic":
         out_str = ams_ingests.make_basic_contrib_ingest(catout_table)
     elif args.type == "ams-con-full":        

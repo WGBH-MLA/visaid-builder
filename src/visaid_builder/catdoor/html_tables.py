@@ -19,6 +19,9 @@ HTML_CSS = """
     table{background-color: #E8E8E8;}
     td{border: 1px solid black;}
     th{border: 1px solid black;}
+    .small{font-size: 0.7em;}
+    div.fdata{width: 400px;}
+    pre{white-space: pre-wrap; width: 300px;}
     img{height: 180px;}
     #catdoor{ max-width: 1200px; margin: 0 auto; }
 </style>
@@ -33,12 +36,39 @@ HTML_EXT_SCRIPTS = """
 <script src="https://cdn.datatables.net/select/2.0.0/js/dataTables.select.js"></script>
 """
 
-def stringify_catear_data( d:dict) -> str:
+
+############################################################################
+# Helper functions
+############################################################################
+
+
+def stringify_keys( d:dict) -> str:
     s = ""
-    for k in d:
+
+    keys_sorted = sorted([k for k in d])
+
+    for k in keys_sorted:
         v = d[k]
-        s += ("^^" + k + "\n")
-        s += json.dumps( CATEARS[k](v), indent=2 ) + "\n"    
+        s += (k + " / ")
+    
+    if s:
+        s = s[:-3]
+
+    return s
+
+
+def htmlify_catear_data( d:dict) -> str:
+    s = ""
+
+    keys_sorted = sorted([k for k in d])
+
+    for k in keys_sorted:
+        v = d[k]
+        s += ("<strong>^^" + k + "</strong>")
+        if CATEARS[k](v)["raw_value"]:
+            s += ": " + CATEARS[k](v)["raw_value"] 
+        s += "<br>\n"    
+
     return s
 
 
@@ -52,50 +82,44 @@ def htmlify_keyed_data( d:dict) -> str:
     return s
 
 
-def stringify_keys_from_keyed_data( d:dict) -> str:
-    s = ""
-    for k in d:
-        for v in d[k]:
-            s += ("*" + k + "\n")
-    return s
+############################################################################
+# Table creation functions
+############################################################################
 
+def make_etd_table( outtable ):
 
-def make_our_first_table( outtable ):
-
-    fields1 = [ "asset_id",
-                "cataloger",
-                "export_date",
-                "tp_time" ]
-    fields2 = [ "name_normalized",
-                "person_attributes" ]
+    fields = [ "asset ID",
+               "cataloger",
+               "export date",
+               "time", 
+               "still image",
+               "etd type",
+               "etd text", 
+               "cat ears",
+               "cat ear data",
+                ]
 
     html_css = HTML_CSS
-
     html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
 
     html_table_start = "<table id='catdoor'><thead><tr>\n"
-
-    for f in fields1:
+    for f in fields:
         html_table_start += f"<th>{f}</th>"
-    html_table_start += f"<th>img_data_uri</th>"
-    for f in fields2:
-        html_table_start += f"<th>{f}</th>"
-
     html_table_start += "\n</tr></thead>\n<tbody>"
 
     rows = ""
 
-    chy_outtable = [ r for r in outtable if r["etd_data"]["etd_type"] == "chyron" ]
-
-    for r in chy_outtable:
+    for r in outtable:
         tr = "\n<tr>\n"
-        for f in fields1:
-            tr += f"<td>{r[f]}</td>"
-        #tr += f"<td>X</td>"
+        tr += f"<td class='small'>{r['asset_id']}</td>"
+        tr += f"<td>{r['cataloger']}</td>"
+        tr += f"<td>{r['export_date']}</td>"
+        tr += f"<td>{r['tp_time']}</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        for f in fields2:
-            val = r['etd_data']['chyron_data'][f]
-            tr += f"<td>{val if val is not None else ''}</td>"
+        tr += f"<td>{r['etd_data']['etd_type']}</td>"
+        tr += f"<td><pre>{r['etd_text']}</pre></td>"
+        tr += f"<td>{stringify_keys(r['etd_data']['catear_data'])}</td>"    
+        tr += f"<td>{htmlify_catear_data(r['etd_data']['catear_data'])}</td>"
         tr += "\n</tr>\n"
         rows += tr
 
@@ -121,7 +145,7 @@ def make_our_first_table( outtable ):
                         searchPanes: {
                             show: true
                         },
-                        targets: [0, 1, 2, 5]
+                        targets: [0, 1, 2, 5, 7]
                     },
                     {
                         searchPanes: {
@@ -143,47 +167,43 @@ def make_our_first_table( outtable ):
 
 
 
-def make_chyron_review_table( outtable ):
+def make_chyron_data_table( outtable ):
 
-    fields1 = [ "asset_id",
+    fields  = [ "asset ID",
                 "cataloger",
-                "tp_time", 
-                ]
-    fields2 = [ "name_as_written",
-                "name_normalized",
-                "person_attributes",
+                "time", 
+                "still image",
+                "name as written",
+                "name normalized",
+                "person attributes",
+                "cat ears",
+                "cat ear data",
                  ]
 
     html_css = HTML_CSS
-
     html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
 
     html_table_start = "<table id='catdoor'><thead><tr>\n"
-
-    for f in fields1:
+    for f in fields:
         html_table_start += f"<th>{f}</th>"
-    html_table_start += f"<th>img_data_uri</th>"
-    for f in fields2:
-        html_table_start += f"<th>{f}</th>"
-    
-    html_table_start += f"<th>cat_ear_values</th>"
-
     html_table_start += "\n</tr></thead>\n<tbody>"
 
     rows = ""
 
+    # filter down to just chyron sections
     chy_outtable = [ r for r in outtable if r["etd_data"]["etd_type"] == "chyron" ]
 
     for r in chy_outtable:
         tr = "\n<tr>\n"
-        for f in fields1:
-            tr += f"<td>{r[f]}</td>"
-        #tr += f"<td>X</td>"
+        tr += f"<td class='small'>{r['asset_id']}</td>"
+        tr += f"<td>{r['cataloger']}</td>"
+        tr += f"<td>{r['tp_time']}</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        for f in fields2:
+        for f in ["name_as_written","name_normalized","person_attributes"]:
             val = r['etd_data']['chyron_data'][f]
             tr += f"<td>{val if val is not None else ''}</td>"
-        tr += f"<td>{stringify_catear_data(r['etd_data']['catear_data'])}</td>"
+        tr += f"<td>{stringify_keys(r['etd_data']['catear_data'])}</td>"    
+        tr += f"<td>{htmlify_catear_data(r['etd_data']['catear_data'])}</td>"
         tr += "\n</tr>\n"
         rows += tr
 
@@ -209,7 +229,7 @@ def make_chyron_review_table( outtable ):
                         searchPanes: {
                             show: true
                         },
-                        targets: [0, 1, 5, 7]
+                        targets: [0, 1, 5, 6, 7]
                     },
                     {
                         searchPanes: {
@@ -233,40 +253,39 @@ def make_chyron_review_table( outtable ):
 
 def make_keyed_data_table( outtable ):
 
-    fields1 = [ "asset_id",
-                "cataloger",
-                "tp_time", 
-                ]
-    fields2 = [ "keys",
-                "keyed_data",
+    fields = [ "asset ID",
+               "cataloger",
+               "time", 
+               "still image",
+               "keys",
+               "keyed_data",
+               "cat ears",
+               "cat ear data",
                 ]
 
     html_css = HTML_CSS
-
     html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
 
     html_table_start = "<table id='catdoor'><thead><tr>\n"
-
-    for f in fields1:
+    for f in fields:
         html_table_start += f"<th>{f}</th>"
-    html_table_start += f"<th>img_data_uri</th>"
-    for f in fields2:
-        html_table_start += f"<th>{f}</th>"
-
     html_table_start += "\n</tr></thead>\n<tbody>"
 
     rows = ""
 
+    # filter down to just keyed sections
     k_outtable = [ r for r in outtable if r["etd_data"]["etd_type"] == "keyed" ]
 
     for r in k_outtable:
         tr = "\n<tr>\n"
-        for f in fields1:
-            tr += f"<td>{r[f]}</td>"
-        #tr += f"<td>X</td>"
+        tr += f"<td class='small'>{r['asset_id']}</td>"
+        tr += f"<td>{r['cataloger']}</td>"
+        tr += f"<td>{r['tp_time']}</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        tr += f"<td><pre>{stringify_keys_from_keyed_data(r['etd_data']['keyed_data'])}</pre></td>"
-        tr += f"<td>{htmlify_keyed_data(r['etd_data']['keyed_data'])}</td>"
+        tr += f"<td>{stringify_keys(r['etd_data']['keyed_data'])}</td>"
+        tr += f"<td><div class='fdata'>{htmlify_keyed_data(r['etd_data']['keyed_data'])}</div></td>"
+        tr += f"<td>{stringify_keys(r['etd_data']['catear_data'])}</td>"    
+        tr += f"<td>{htmlify_catear_data(r['etd_data']['catear_data'])}</td>"
         tr += "\n</tr>\n"
         rows += tr
 
@@ -292,266 +311,7 @@ def make_keyed_data_table( outtable ):
                         searchPanes: {
                             show: true
                         },
-                        targets: [0, 1, 4]
-                    },
-                    {
-                        searchPanes: {
-                            show: false
-                        },
-                        targets: '_all' // Hide everything else explicitly
-                    }
-                ]
-            });
-        });
-    </script>
-    """
-
-    html_end = "\n\n</body></html>"
-
-    html_str = html_start + html_table_start + rows + html_table_end + html_scripts + html_end
-
-    return html_str
-
-
-
-def make_etd_table( outtable ):
-
-    fields1 = [ "asset_id",
-                "cataloger",
-                "export_date",
-                "tp_time" ]
-    fields2 = [ "etd_text" ]
-
-    html_css = HTML_CSS
-
-    html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
-
-    html_table_start = "<table id='catdoor'><thead><tr>\n"
-
-    for f in fields1:
-        html_table_start += f"<th>{f}</th>"
-    html_table_start += f"<th>img_data_uri</th>"
-    for f in fields2:
-        html_table_start += f"<th>{f}</th>"
-
-    html_table_start += "\n</tr></thead>\n<tbody>"
-
-    rows = ""
-
-    for r in outtable:
-        tr = "\n<tr>\n"
-        for f in fields1:
-            tr += f"<td>{r[f]}</td>"
-        #tr += f"<td>X</td>"
-        tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        for f in fields2:
-            tr += f"<td><pre>{r[f]}</pre></td>"
-        tr += "\n</tr>\n"
-        rows += tr
-
-    html_table_end = "</tbody></table>"
-
-    html_scripts = HTML_EXT_SCRIPTS + """
-    <script>
-        $(document).ready(function() {
-            $('#catdoor').DataTable({
-                pageLength: 100,
-                // layout: defines where the facets (searchPanes) appear
-                layout: {
-                    top1: {
-                        searchPanes: {
-                            // Set to false so it only shows what we explicitly ask for in columnDefs
-                            show: false
-                        }
-                    }
-                },
-                // configures the faceting behavior
-                columnDefs: [
-                    {
-                        searchPanes: {
-                            show: true
-                        },
-                        targets: [0, 1, 2]
-                    },
-                    {
-                        searchPanes: {
-                            show: false
-                        },
-                        targets: '_all' // Hide everything else explicitly
-                    }
-                ]
-            });
-        });
-    </script>
-    """
-
-    html_end = "\n\n</body></html>"
-
-    html_str = html_start + html_table_start + rows + html_table_end + html_scripts + html_end
-
-    return html_str
-
-
-def make_exp_table( outtable ):
-
-    fields1 = [ "asset_id",
-                "cataloger",
-                "export_date",
-                "tp_time" ]
-    fields2 = [ "etd_text" ]
-
-    html_css = HTML_CSS
-
-    html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
-
-    html_table_start = "<table id='catdoor'><thead><tr>\n"
-
-    for f in fields1:
-        html_table_start += f"<th>{f}</th>"
-    html_table_start += f"<th>img_data_uri</th>"
-    for f in fields2:
-        html_table_start += f"<th>{f}</th>"
-
-    html_table_start += "\n</tr></thead>\n<tbody>"
-
-    rows = ""
-
-    # text without line breaks
-    #exp_outtable = [ r for r in outtable if ( r["etd_text"].find("\n") == -1 ) ]
-
-    # text that should have line breaks but doesn't
-    # exp_outtable = [ r for r in outtable if ( r["etd_data"]["etd_type"] != "keyed" and 
-    #                                           r["etd_text"].find("\n") == -1 and
-    #                                           r["etd_text"].find("^") != 0 ) ]
-    f = [ r for r in outtable if ( 
-            ( r["etd_data"]["etd_type"] == "chyron" and (
-                r["etd_data"]["chyron_data"]["name_as_written"].find("^^") != -1 or
-                r["etd_data"]["chyron_data"]["name_normalized"].find("^^") != -1 or
-                r["etd_data"]["chyron_data"]["person_attributes"].find("^^") != -1 ) ) 
-            )]
-
-
-    exp_outtable = f 
-
-    for r in exp_outtable:
-        tr = "\n<tr>\n"
-        for f in fields1:
-            tr += f"<td>{r[f]}</td>"
-        #tr += f"<td>X</td>"
-        tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        for f in fields2:
-            tr += f"<td><pre>{r[f]}</pre></td>"
-        tr += "\n</tr>\n"
-        rows += tr
-
-    html_table_end = "</tbody></table>"
-
-    html_scripts = HTML_EXT_SCRIPTS + """
-    <script>
-        $(document).ready(function() {
-            $('#catdoor').DataTable({
-                pageLength: 100,
-                // layout: defines where the facets (searchPanes) appear
-                layout: {
-                    top1: {
-                        searchPanes: {
-                            // Set to false so it only shows what we explicitly ask for in columnDefs
-                            show: false
-                        }
-                    }
-                },
-                // configures the faceting behavior
-                columnDefs: [
-                    {
-                        searchPanes: {
-                            show: true
-                        },
-                        targets: [0, 1, 2]
-                    },
-                    {
-                        searchPanes: {
-                            show: false
-                        },
-                        targets: '_all' // Hide everything else explicitly
-                    }
-                ]
-            });
-        });
-    </script>
-    """
-
-    html_end = "\n\n</body></html>"
-
-    html_str = html_start + html_table_start + rows + html_table_end + html_scripts + html_end
-
-    return html_str
-
-
-def make_prob_table( outtable ):
-
-    fields1 = [ "asset_id",
-                "cataloger",
-                "tp_time" ]
-    fields2 = [ "etd_text" ]
-    fields3 = [ "etd_type" ] 
-
-    html_css = HTML_CSS
-
-    html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
-
-    html_table_start = "<table id='catdoor'><thead><tr>\n"
-
-    for f in fields1:
-        html_table_start += f"<th>{f}</th>"
-    html_table_start += f"<th>img_data_uri</th>"
-    for f in fields2:
-        html_table_start += f"<th>{f}</th>"
-    for f in fields3:
-        html_table_start += f"<th>{f}</th>"
-
-    html_table_start += "\n</tr></thead>\n<tbody>"
-
-    rows = ""
-
-    exp_outtable = [ r for r in outtable if ( r["etd_data"]["problem"] or 
-                                              "_problem" in r["etd_data"]["catear_data"] )]
-
-    for r in exp_outtable:
-        tr = "\n<tr>\n"
-        for f in fields1:
-            tr += f"<td>{r[f]}</td>"
-        #tr += f"<td>X</td>"
-        tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        for f in fields2:
-            tr += f"<td><pre>{r[f]}</pre></td>"
-        for f in fields3:
-            tr += f"<td>{r['etd_data'][f]}</td>"
-        tr += "\n</tr>\n"
-        rows += tr
-
-    html_table_end = "</tbody></table>"
-
-    html_scripts = HTML_EXT_SCRIPTS + """
-    <script>
-        $(document).ready(function() {
-            $('#catdoor').DataTable({
-                pageLength: 100,
-                // layout: defines where the facets (searchPanes) appear
-                layout: {
-                    top1: {
-                        searchPanes: {
-                            // Set to false so it only shows what we explicitly ask for in columnDefs
-                            show: false
-                        }
-                    }
-                },
-                // configures the faceting behavior
-                columnDefs: [
-                    {
-                        searchPanes: {
-                            show: true
-                        },
-                        targets: [0, 1, 5]
+                        targets: [0, 1, 4, 6]
                     },
                     {
                         searchPanes: {
@@ -573,48 +333,52 @@ def make_prob_table( outtable ):
 
 
 def make_contrib_ingest_table( outtable ):
+    """
+    This function makes a table that is intended to represent exactly the data that 
+    would be ingested into the AMS.
+    It also shows the image and raw editor text.
+    """
 
-    fields1 = [ "asset_id",
-                "tp_time" ]
-    fields2 = [ "contributor",
-                "annotation",
-                "contributor_role_annotation",
-                "contributor_role",
-                "affiliation_annotation" ]
+    fields = [ 
+        "id",
+        "start-time",
+        "(still image)",
+        "(raw editor text)",
+        "contributor (name normalized)",
+        "annotation (name as written)",
+        "contributor-role-annotation (attributes)",
+        "contributor-role (role)",        
+        "affiliation-annotation (team)",
+        ]
 
-    colheads = {
-        "asset_id": "Asset ID",
-        "tp_time": "start_time",
-        "contributor": "contributor [Name normalized]",
-        "annotation": "annotation [Name as written]",
-        "contributor_role_annotation": "contributor_role_annotation [On-screen attributes]",
-        "contributor_role": "contributor_role [Role]",
-        "affiliation_annotation": "affiliation_annotation [Home team?]"
-    }
+    contrib_fields = [ 
+        "contributor",
+        "annotation",
+        "contributor_role_annotation",
+        "contributor_role",
+        "affiliation_annotation",
+        ]
 
     html_css = HTML_CSS
-
     html_start = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{html_css}\n</head>\n<body>\n"
 
     html_table_start = "<table id='catdoor'><thead><tr>\n"
-
-    for f in fields1:
-        html_table_start += f"<th>{colheads[f]}</th>"
-    html_table_start += f"<th>[Still image]</th>"
-    html_table_start += f"<th>[Raw 'etd_text']</th>"
-    for f in fields2:
-        html_table_start += f"<th>{colheads[f]}</th>"
-
+    for f in fields:
+        html_table_start += f"<th>{f}</th>"
     html_table_start += "\n</tr></thead>\n<tbody>"
 
     guids = list(dict.fromkeys([r["asset_id"] for r in outtable]))
     
+    # Data wrangling to get the contributor data   
     rows_data = []
+    # Work guid-by-guid
     for guid in guids:
         asset_contribs = []
+        # For each frame, check whether it has contributor data
         for r in [r for r in outtable if r["asset_id"] == guid]:
             if r["etd_data"]["etd_type"] == "chyron":
                 if "sens" not in r["etd_data"]["catear_data"]:
+                    # perform conversion to AMS data model structure
                     c = ams_ingests.map_chyron_sec(r)
                     c["tp_time"] = f'{((int(r["tp_time"]))/1000):.3f}'
                     c["img_data_uri"] = r["img_data_uri"]
@@ -622,10 +386,13 @@ def make_contrib_ingest_table( outtable ):
                     c["asset_id"] = guid
                     asset_contribs.append(c)
             elif r["etd_data"]["etd_type"] == "keyed":
-                if "contrib" in r["etd_data"]["keyed_data"]:
+                if ("contrib" in r["etd_data"]["keyed_data"] and 
+                    "sens" not in r["etd_data"]["catear_data"]
+                    ):
                     for v in r["etd_data"]["keyed_data"]["contrib"]:
+                        # perform conversion to AMS data model structure
                         c = ams_ingests.map_contrib_key_val(v, r["tp_time"])
-                        c["tp_time"] = r["tp_time"]
+                        c["tp_time"] = f'{((int(r["tp_time"]))/1000):.3f}'
                         c["img_data_uri"] = r["img_data_uri"]
                         c["etd_text"] = r["etd_text"]
                         c["asset_id"] = guid
@@ -643,14 +410,14 @@ def make_contrib_ingest_table( outtable ):
         rows_data.extend(unique_asset_contribs)
 
     rows = ""
-    for r in rows_data:
+    for c in rows_data:
         tr = "\n<tr>\n"
-        for f in fields1:
-            tr += f"<td>{r[f]}</td>"
-        tr += f"<td><img src='{r['img_data_uri']}'></td>"
-        tr += f"<td><pre>{r['etd_text']}</pre></td>"
-        for f in fields2:
-            val = r.get(f)
+        tr += f"<td class='small'>{c['asset_id']}</td>"
+        tr += f"<td>{c['tp_time']}</td>"
+        tr += f"<td><img src='{c['img_data_uri']}'></td>"
+        tr += f"<td><pre>{c['etd_text']}</pre></td>"
+        for f in contrib_fields:
+            val = c.get(f)
             tr += f"<td>{val if val is not None else ''}</td>"
         tr += "\n</tr>\n"
         rows += tr
@@ -677,7 +444,7 @@ def make_contrib_ingest_table( outtable ):
                         searchPanes: {
                             show: true
                         },
-                        targets: [0, 4, 7, 8]
+                        targets: [0, 4, 6, 7, 8]
                     },
                     {
                         searchPanes: {
@@ -697,3 +464,10 @@ def make_contrib_ingest_table( outtable ):
 
     return html_str
 
+
+def make_attention_table( outtable ):
+
+    atn_outtable = [ r for r in outtable if r["etd_data"]["problem"] ]
+                                              
+    
+    return make_etd_table(atn_outtable)
