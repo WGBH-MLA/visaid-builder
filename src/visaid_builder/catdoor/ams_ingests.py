@@ -98,7 +98,9 @@ def make_full_contrib_ingest( outtable ):
                     all_guid_contribs.append(contrib)
     
             elif r["etd_data"]["etd_type"] == "keyed":
-                if "contrib" in r["etd_data"]["keyed_data"]:
+                if ("contrib" in r["etd_data"]["keyed_data"] and 
+                    "sens" not in r["etd_data"]["catear_data"]
+                    ):
                     for v in r["etd_data"]["keyed_data"]["contrib"]:
                         contrib = map_contrib_key_val(v, r["tp_time"])
                         all_guid_contribs.append(contrib)
