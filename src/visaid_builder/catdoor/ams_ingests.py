@@ -13,6 +13,11 @@ import pprint
 
 from . import keys_catears
 
+CONTRIB_UNIQUENESS_COLS = [ "contributor","annotation","contributor_role","contributor_role_annotation"]
+
+############################################################################
+# Functions for transforming string values into AMS data values
+############################################################################
 
 def map_contrib_key_val( v:str, tp_time ) -> dict:
 
@@ -72,12 +77,44 @@ def map_chyron_sec( r:dict ) -> dict:
     return contrib
 
 
+############################################################################
+# Main functions for supporting ingest
+############################################################################
 
-def make_full_contrib_ingest( outtable ):
+def make_full_contrib_ingest( outtable, level='full' ):
     """
     This is the full contributor ingest format including data supported by 
     AMS2 updates in spring 2026.
     """
+
+    # Establish detail level of data to be ingested
+    basic_contribution_cols = [
+        "contributor", 
+        "contributor_role"
+    ]
+    exp_contribution_cols = [
+        "contributor", 
+        "annotation", 
+        "affiliation", 
+        "contributor_role"
+    ]
+    full_contribution_cols = [
+        "contributor", 
+        "annotation", 
+        "start_time", 
+        "time_annotation", 
+        "affiliation", 
+        "affiliation_annotation", 
+        "contributor_role",
+        "contributor_role_annotation"
+    ]
+
+    if level == 'full':
+        contribution_cols = full_contribution_cols
+    elif level == 'basic':
+        contribution_cols = basic_contribution_cols
+    elif level == 'exp':
+        contribution_cols = exp_contribution_cols
 
     # proceed one asset at a time
     # guids = list(set( [ r["asset_id"] for r in outtable ] ) )
@@ -109,13 +146,14 @@ def make_full_contrib_ingest( outtable ):
         if all_guid_contribs:        
             guid_contribs[guid] = []
 
-            # Add just unique contributor entries
-            # Uniqueness is determined by the normalized name, the role, and the role annotation.
-            # (For this ingest, we do not want duplicates of that triple.)
+            # Add just unique contributor entries.
+            # Uniqueness is determined fields listed in a global variable 
+            # that are also fields used in this ingest.
             seen_uniques = set()
-
             for c in all_guid_contribs:
-                c_uniqueness = (c["contributor"],c["contributor_role"],c["contributor_role_annotation"])
+                c_uniqueness_l = [ c[k] for k in CONTRIB_UNIQUENESS_COLS 
+                                   if k in contribution_cols ] 
+                c_uniqueness = tuple(c_uniqueness_l)
                 if c_uniqueness not in seen_uniques:
                     seen_uniques.add(c_uniqueness)
                     guid_contribs[guid].append(c)
@@ -129,30 +167,6 @@ def make_full_contrib_ingest( outtable ):
         
         print(f"Will create contributor records for {len(guid_contribs)} items.")
         print(f"Max contributors per item: {max_contribs}")
-
-        min_contribution_cols = [
-            "contributor", 
-            "contributor_role"
-        ]
-        exp_contribution_cols = [
-            "contributor", 
-            "annotation", 
-            "affiliation", 
-            "contributor_role"
-        ]
-        all_contribution_cols = [
-            "contributor", 
-            "annotation", 
-            "start_time", 
-            "time_annotation", 
-            "affiliation", 
-            "affiliation_annotation", 
-            "contributor_role",
-            "contributor_role_annotation"
-        ]
-        # contribution_cols = min_contribution_cols
-        # contribution_cols = exp_contribution_cols
-        contribution_cols = all_contribution_cols
 
         # create enough column headers for everyone from each item
         csv_header_row = ["Asset", "Asset.id"]
@@ -189,116 +203,8 @@ def make_full_contrib_ingest( outtable ):
         return csv_string
 
 
-########################################################################
-# DEPRECATED FUNCTIONS
-########################################################################
-
-# DEPRECATED
-def parse_contrib_val( v:str ) -> (str, str, bool):
-    # DEPRECATED
-    
-    # Find the role in parenetheses
-    rolematch = re.search(r'\((.*?)\)', v)
-
-    if rolematch:
-        role = rolematch.group(1).strip()
-        name = v.split("(")[0].strip()
-    else:
-        role = ""
-        name = v.split("^")[0].strip()
-
-    # Indicate whether there is a ^^home catear flag
-    if v.find("^^home") != -1:
-        home = True
-    else:
-        home = False
-
-    return (name, role, home)
-
-
-# DEPRECATED
 def make_basic_contrib_ingest( catout_table ):
-    """
-    This is the original contributor ingest format, prior to updates to the 
-    AMS2 data model.
 
-    It captures only the normalized name (as the value of `Contribution.contributor`)
-    and the role (as the value of `Contribution.contributor_role`).
-    """
-    # DEPRECATED
-
-    # project down to just the important values
-    data = [ { "asset_id": r["asset_id"], 
-               "etd_type": r["etd_data"]["etd_type"],
-               "chyron_data": r["etd_data"]["chyron_data"],
-               "keyed_data": r["etd_data"]["keyed_data"],
-               "catear_data": r["etd_data"]["catear_data"] }
-              for r in catout_table ]
-
-    # proceed one asset at a time
-    # guids = list(set( [ r["asset_id"] for r in data ] ) )
-    guids = list(dict.fromkeys( [ r["asset_id"] for r in data ] ) )
-
-    # create a dictionary of contributor records for each asset
-    guid_contribs = {}
-
-    for guid in guids:
-        all_guid_contribs = []
-        for r in [r for r in data if r["asset_id"] == guid]:
-            if r["etd_type"] == "chyron":
-                if ("sens" not in r["catear_data"]):              
-                    d = {}
-                    d["name_normalized"] = r["chyron_data"]["name_normalized"]
-                    d["role"] = ""
-                    all_guid_contribs.append(d)
-            elif r["etd_type"] == "keyed":
-                if "contrib" in r["keyed_data"]:
-                    # the value of each key is a list
-                    for c in r["keyed_data"]["contrib"]:
-                        d = {}
-                        d["name_normalized"], d["role"], _ = parse_contrib_val(c)
-                        all_guid_contribs.append(d)
-
-        # get just unique contributors
-        if all_guid_contribs:
-            guid_contribs[guid] = []
-            for c in all_guid_contribs:
-                if c not in guid_contribs[guid]:
-                    guid_contribs[guid].append(c)
+    return make_full_contrib_ingest( catout_table, level='basic' )
 
 
-    max_contribs = max( [ len(guid_contribs[guid]) for guid in guid_contribs ] ) 
-    
-    print(f"Will create contributor records for {len(guid_contribs)} items.")
-    print(f"Max contributors per item: {max_contribs}")
-
-    # create enough column headers for everyone from each item
-    csv_header_row = ["Asset", "Asset.id"]
-    for _ in range(max_contribs):
-        csv_header_row += ["Contribution", "Contribution.contributor", "Contribution.contributor_role"]
-
-    # first row is thea header
-    csv_rows = [ csv_header_row ]
-
-    # add rows for each asset
-    contrib_recs = 0
-    for guid in guid_contribs:
-        row = ["", guid]
- 
-        for c in guid_contribs[guid]:
-            row += [ "", c["name_normalized"], c["role"] ]
-            contrib_recs += 1
- 
-        pad = max_contribs - len(guid_contribs[guid])
-        for _ in range(pad):
-            row += [ "", "", ""]
-
-        csv_rows.append(row)
-
-    print(f"Recorded {contrib_recs} contributor records.")
-
-    # return value is a string of CSV text
-    out_io = io.StringIO()
-    csv.writer(out_io).writerows(csv_rows)
-    csv_string = out_io.getvalue()
-    return csv_string

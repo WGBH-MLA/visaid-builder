@@ -398,11 +398,13 @@ def make_contrib_ingest_table( outtable ):
                         c["asset_id"] = guid
                         asset_contribs.append(c)
                         
-        # De-duplicate per asset
+        # Add just unique contributor entries.
+        # Uniqueness is determined fields listed in a global variable 
         unique_asset_contribs = []
         seen_uniques = set()
         for c in asset_contribs:
-            c_uniqueness = (c["contributor"], c["contributor_role"], c["contributor_role_annotation"])
+            c_uniqueness_l = [ c[k] for k in ams_ingests.CONTRIB_UNIQUENESS_COLS ] 
+            c_uniqueness = tuple(c_uniqueness_l)
             if c_uniqueness not in seen_uniques:
                 seen_uniques.add(c_uniqueness)
                 unique_asset_contribs.append(c)
