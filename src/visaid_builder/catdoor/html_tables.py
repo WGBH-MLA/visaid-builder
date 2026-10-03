@@ -45,7 +45,7 @@ HTML_EXT_SCRIPTS = """
 def stringify_keys( d:dict) -> str:
     s = ""
 
-    keys_sorted = sorted([k for k in d])
+    keys_sorted = sorted([ k for k in d  if k[0]!="_" ])
 
     for k in keys_sorted:
         v = d[k]
@@ -60,7 +60,7 @@ def stringify_keys( d:dict) -> str:
 def htmlify_catear_data( d:dict) -> str:
     s = ""
 
-    keys_sorted = sorted([k for k in d])
+    keys_sorted = sorted([ k for k in d if k[0]!="_" ])
 
     for k in keys_sorted:
         v = d[k]
@@ -72,11 +72,39 @@ def htmlify_catear_data( d:dict) -> str:
     return s
 
 
+def htmlify_attention( etd_data:dict ) -> str:
+    s = ""
+    if etd_data["problems"]:
+        s += "problem +"
+    if etd_data["alerts"]:
+        s += "alert +"
+    if s:
+        s = s[:-2]
+    return s
+
+
+def htmlify_messages( etd_data:dict ) -> str:
+    s = ""
+    for p in etd_data["problems"]:
+        s += p + "<br>"
+    for a in etd_data["alerts"]:
+        s += a + "<br>"
+    return s
+
+
 def htmlify_keyed_data( d:dict) -> str:
     s = ""
-    for k in d:
+
+    keys_sorted = sorted([ k for k in d if k[0]!="_" ])
+
+    for k in keys_sorted:
         for v in d[k]:
-            for kv in KEYS[k](v):
+            # We want to print the raw value first.
+            # We want to omit key names that begin with an underscore
+            kv = "raw_value"
+            s += f"<strong>{k}→ {kv}</strong>:\t{KEYS[k](v)[kv]}<br>\n"
+            kv_sorted = sorted([ kv for kv in KEYS[k](v) if kv[0]!="_" and kv!="raw_value" ])
+            for kv in kv_sorted:
                 s += f"<strong>{k}→ {kv}</strong>:\t{KEYS[k](v)[kv]}<br>\n"
             s += f"<br>\n"
     return s
@@ -97,6 +125,8 @@ def make_etd_table( outtable ):
                "etd text", 
                "cat ears",
                "cat ear data",
+               "to attend to",
+               "message",
                 ]
 
     html_css = HTML_CSS
@@ -113,13 +143,15 @@ def make_etd_table( outtable ):
         tr = "\n<tr>\n"
         tr += f"<td class='small'>{r['asset_id']}</td>"
         tr += f"<td>{r['cataloger']}</td>"
-        tr += f"<td>{r['export_date']}</td>"
+        tr += f"<td class='small'>{r['export_date']}</td>"
         tr += f"<td>{r['tp_time']}</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
         tr += f"<td>{r['etd_data']['etd_type']}</td>"
         tr += f"<td><pre>{r['etd_text']}</pre></td>"
         tr += f"<td>{stringify_keys(r['etd_data']['catear_data'])}</td>"    
         tr += f"<td>{htmlify_catear_data(r['etd_data']['catear_data'])}</td>"
+        tr += f"<td>{htmlify_attention(r['etd_data'])}</td>"
+        tr += f"<td class='small'>{htmlify_messages(r['etd_data'])}</td>"
         tr += "\n</tr>\n"
         rows += tr
 
@@ -145,7 +177,7 @@ def make_etd_table( outtable ):
                         searchPanes: {
                             show: true
                         },
-                        targets: [0, 1, 2, 5, 7]
+                        targets: [0, 1, 5, 7, 9]
                     },
                     {
                         searchPanes: {
@@ -467,9 +499,16 @@ def make_contrib_ingest_table( outtable ):
     return html_str
 
 
+def make_etd_atn_table( outtable ):
+
+    atn_outtable = [ r for r in outtable if r["etd_data"]["problems"] or r["etd_data"]["alerts"] ]
+    
+    return make_etd_table(atn_outtable)
+
+
+
 def make_attention_table( outtable ):
 
-    atn_outtable = [ r for r in outtable if r["etd_data"]["problem"] ]
-                                              
+    atn_outtable = [ r for r in outtable if r["etd_data"]["problems"] or r["etd_data"]["alerts"] ]
     
     return make_etd_table(atn_outtable)

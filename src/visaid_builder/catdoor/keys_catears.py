@@ -7,7 +7,7 @@ The logic here comes into play only after the "etd_text" has already
 been parsed into keys (catear or normal) and their values.
 
 Each of these functions returns a dictionary with two standard elements: 
-"problems" and "raw_value".  Additional elements are specific to the values
+"_problems" and "raw_value".  Additional elements are specific to the values
 relevant to that particular catear or ETD key.
 
 
@@ -42,18 +42,18 @@ def parse_key_generic( v:str ) -> dict:
     """
     Generic key parser.
     Keys in the returned dict:
-      - raw_value
-      - problems
+      - raw_value (str)
+      - problems (list of str)
     """
 
     problems = []
 
     if v.find("*") != -1:
-        problems.append("Key value contains asterisk")
+        problems.append("Warning: Key value contains asterisk.")
 
     d = {
         "raw_value": v,
-        "problems": problems
+        "_problems": problems
     }
     return d
 
@@ -62,23 +62,25 @@ def parse_key_genre( v:str ) -> dict:
     """
     Simple parser for 'genre' key.
     Keys in the returned dict:
-      - raw_value
-      - problems
-      - genre
+      - raw_value (str)
+      - problems (list of str)
+      - genre (str) [Only if valid]
     """
     problems = []
 
     if nterm(v) in GENRES_d:
         genre = GENRES_d[nterm(v)]
     else:
-        problems.append("Invalid genre")
+        problems.append(f"Warning: Invalid genre '{v}'; will ignore.")
         genre = None
 
     d = {
         "raw_value": v,
-        "problems": problems,
-        "genre": genre
+        "_problems": problems,
     }
+    if genre:
+        d["genre"] = genre
+
     return d
 
 
@@ -87,23 +89,25 @@ def parse_key_topic( v:str ) -> dict:
     """
     Simple parser for 'topic' key.
     Keys in the returned dict:
-      - raw_value
-      - problems
-      - topic
+      - raw_value (str)
+      - problems (list of str)
+      - topic (str)
     """    
     problems = []
 
     if nterm(v) in TOPICS_d:
         topic = TOPICS_d[nterm(v)]
     else:
-        problems.append("Invalid topic")
+        problems.append(f"Warning: Invalid topic '{v}'; will ignore.")
         topic = None
 
     d = {
         "raw_value": v,
-        "problems": problems,
-        "topic": topic
+        "_problems": problems,
     }
+    if topic:
+        d["topic"]= topic
+
     return d
 
 
@@ -117,10 +121,10 @@ def parse_key_contrib( v: str ) -> dict:
         `*contrib: Furber, Lincoln (Producer) ^^home ^^np`
 
     Keys in the returned dict:
-      - raw_value
-      - problems
-      - name_normalized
-      - role
+      - raw_value (str)
+      - problems (list of str)
+      - name_normalized (str)
+      - role (str)
       - home (bool) 
       - pictured (bool)
     """
@@ -138,7 +142,7 @@ def parse_key_contrib( v: str ) -> dict:
         if nterm(role_str) in ROLES_d:
             role = ROLES_d[nterm(role_str)]
         else:
-            problems.append("Invalid role")
+            problems.append(f"Invalid role '{v}'; will ignore.")
             role = None
     else:
         name = v.split("^")[0].strip()
@@ -154,12 +158,11 @@ def parse_key_contrib( v: str ) -> dict:
     # Validate that every inline catear matches our allowed tags list
     for tag in inline_tags:
         if tag not in ["home", "np"]:
-            problems.append("Invalid catear")
-            break
+            problems.append(f"Invalid in-line cat ear '^^{tag}' for `*contrib`; will ignore.")
 
     d = {
         "raw_value": v,
-        "problems": problems,
+        "_problems": problems,
         "name_normalized": name,
         "role": role,
         "home": home,
@@ -175,19 +178,22 @@ def parse_key_contrib( v: str ) -> dict:
 
 def parse_catear_generic( v:str ) -> dict:
     problems = []
+    alerts = []
 
     if v.find("^") != -1:
-        problems.append("Warning: Catear value contains caret")
+        problems.append("Warning: Cat ear value contains caret.")
 
     d = {
         "raw_value": v,
-        "problems": problems
+        "_problems": problems,
+        "_alerts": alerts,
     }
     return d
 
 
 def parse_catear_role( v:str ) -> dict:
     problems = []
+    alerts = []    
 
     if nterm(v) in ROLES_d:
         role = ROLES_d[nterm(v)]
@@ -197,23 +203,28 @@ def parse_catear_role( v:str ) -> dict:
 
     d = {
         "raw_value": v,
-        "problems": problems,
-        "role": role
+        "_problems": problems,
+        "_alerts": alerts,
     }
+    if role:
+        d["role"] = role
+
     return d
 
 
 def parse_catear_sens( v:str ) -> dict:
     problems = []
+    alerts = []    
 
     if v.find("^") != -1:
-        problems.append("Warning: Catear value contains caret")
+        problems.append("Warning: Cat ear value contains caret.")
 
-    problems.append("Alert: Review content")
+    alerts.append("Alert: Content review needed.")
 
     d = {
         "raw_value": v,
-        "problems": problems
+        "_problems": problems,
+        "_alerts": alerts,        
     }
     return d
 
@@ -226,43 +237,43 @@ def parse_catear_sens( v:str ) -> dict:
 ############################################################################
 
 CHYRON_SEC_CATEARS = {
-    "home":   parse_catear_generic,
-    "np":     parse_catear_generic,
-    "role":   parse_catear_role,
+    "home":            parse_catear_generic,
+    "np":              parse_catear_generic,
+    "role":            parse_catear_role,
     "omit-attributes": parse_catear_sens,
 }
 GENERAL_CATEARS =  {
-    "miss":   parse_catear_generic,
-    "sens":   parse_catear_sens,
-    "cw":     parse_catear_generic,
-    "note":   parse_catear_generic,
-    "social": parse_catear_generic,
+    "miss":            parse_catear_generic,
+    "sens":            parse_catear_sens,
+    "cw":              parse_catear_sens,
+    "note":            parse_catear_sens,
+    "social":          parse_catear_generic,
 }
 CATEARS = CHYRON_SEC_CATEARS | GENERAL_CATEARS
 
 KEYS = {
-    "contrib": parse_key_contrib,
-    "prod": parse_key_generic,
-    "dir": parse_key_generic,
-    "cam": parse_key_generic,
-    "air": parse_key_generic,
-    "rec": parse_key_generic,
-    "date": parse_key_generic,
-    "copyright-year": parse_key_generic,
+    "contrib":         parse_key_contrib,
+    "prod":            parse_key_generic,
+    "dir":             parse_key_generic,
+    "cam":             parse_key_generic,
+    "air":             parse_key_generic,
+    "rec":             parse_key_generic,
+    "date":            parse_key_generic,
+    "copyright-year":  parse_key_generic,
     "copyright-owner": parse_key_generic,
-    "copr": parse_key_generic, 
-    "prog-title": parse_key_generic,
-    "series-title": parse_key_generic,
-    "ep-title": parse_key_generic, 
-    "ep-no": parse_key_generic,
-    "title": parse_key_generic,
-    "prog-desc": parse_key_generic,
-    "ep-desc": parse_key_generic, 
-    "genre": parse_key_genre,
-    "topic": parse_key_topic,
-    "geo": parse_key_generic,
-    "bumper": parse_key_generic,
-    "performance": parse_key_generic,
+    "copr":            parse_key_generic, 
+    "prog-title":      parse_key_generic,
+    "series-title":    parse_key_generic,
+    "ep-title":        parse_key_generic, 
+    "ep-no":           parse_key_generic,
+    "title":           parse_key_generic,
+    "prog-desc":       parse_key_generic,
+    "ep-desc":         parse_key_generic, 
+    "genre":           parse_key_genre,
+    "topic":           parse_key_topic,
+    "geo":             parse_key_generic,
+    "bumper":          parse_key_generic,
+    "performance":     parse_key_generic,
 }
 
 # from local controlled vocabulary

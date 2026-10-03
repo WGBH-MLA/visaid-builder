@@ -34,7 +34,7 @@ def tablify_catouts( paths:list ) -> list:
     This function works only at the level of explicit structure.  It calls
     a parsing function in a separate module to interpret implicit structure.    
 
-    Each list item is a dictionary with the following dkeys
+    Each list item is a dictionary with the following keys
 
     "asset_id"                - string: Asset ID
     "cataid_id"               - string: Cataid ID
@@ -223,9 +223,9 @@ def main():
     if out_str:
         with open(out_fname, "w") as f:
             f.write(out_str)
-        print(f"Wrote output file to to {out_fname}")
+        print(f"\nWrote output file to to {out_fname}")
     else:
-        print(f"No output to write.")
+        print(f"\nNo output to write.")
 
 
 if __name__ == "__main__":
