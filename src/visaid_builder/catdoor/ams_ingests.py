@@ -19,11 +19,21 @@ CONTRIB_UNIQUENESS_COLS = [ "contributor","annotation","contributor_role","contr
 # Functions for transforming string values into AMS data values
 ############################################################################
 
+def convert_tp_time( tp_time:str ) -> str:
+    """
+    Converts millisecons (expressed as int or string) to fractional
+    seconds expressed as a string.
+    """
+    tp_secs = f'{((int(tp_time))/1000):.3f}'
+
+    return tp_secs
+
+
 def map_contrib_key_val( v:str, tp_time ) -> dict:
 
     d = keys_catears.KEYS["contrib"](v)
 
-    tp_secs = f'{((int(tp_time))/1000):.3f}'
+    tp_secs = convert_tp_time(tp_time)
 
     if d["home"]:
         aff_ann = "Producing Organization"
@@ -50,7 +60,7 @@ def map_contrib_key_val( v:str, tp_time ) -> dict:
 
 def map_chyron_sec( r:dict ) -> dict:
 
-    tp_secs = r["tp_time"] / 1000
+    tp_secs = convert_tp_time(r["tp_time"])
 
     if "home" in r["etd_data"]["catear_data"]:
         aff_ann = "Producing Organization"
