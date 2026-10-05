@@ -300,11 +300,17 @@ def _parse_sec_chyron( sec: str, asset_id:str = None ) -> dict:
     for k in ["name_as_written", "name_normalized", "person_attributes" ]:
         if chyron_data[k] is not None and chyron_data[k].find("^^") != -1:
             problems.append("Warning: Cat ear flags appearing in chyron data lines.")
+        if chyron_data[k] is not None and chyron_data[k].find("*") == 0:
+            problems.append("Warning: Keyed data lines appearing in chyron data.")
     if len(chyron_data["name_normalized"]) > len(chyron_data["name_as_written"]) + 2:
         problems.append("Warning: Normalized name is suspiciously long.")
+    if not ( chyron_data["name_normalized"][0].isalpha() and 
+             chyron_data["name_as_written"][0].isalpha() 
+             ):
+        problems.append("Warning: A name begins with a non-alphabetical character.")
     if chyron_data["name_normalized"].find(",") == -1:
         problems.append("Warning: Normalized name contains no comma.")
-    elif chyron_data["name_as_written"].find(chyron_data["name_normalized"].split(",")[0]) == -1:
+    elif chyron_data["name_as_written"].lower().find(chyron_data["name_normalized"].lower().split(",")[0]) == -1:
         problems.append("Warning: Normalized surname does not appear in name as written.")
 
     catear_data = _parse_catear_lines(ear_lines, etd_type="chyron")
@@ -456,7 +462,7 @@ def _parse_catear_lines ( lines:list,
                 catear_data["_problems"].append(msg)
             else:
                 if k not in catear_dict:
-                    msg = f"Warning: Skipping cat ear that is not valid{' in editor type `'+etd_type+'`.' if etd_type else '.'}"
+                    msg = f"Warning: Skipping cat ear that is not valid for editor section{' `'+etd_type+'`.' if etd_type else '.'}"
                     catear_data["_problems"].append(msg)
 
                 # Validate value by calling the catear-specific function in the dispatch table

@@ -75,20 +75,20 @@ def htmlify_catear_data( d:dict) -> str:
 def htmlify_attention( etd_data:dict ) -> str:
     s = ""
     if etd_data["problems"]:
-        s += "problem +"
+        s += "problem + "
     if etd_data["alerts"]:
-        s += "alert +"
+        s += "alert + "
     if s:
-        s = s[:-2]
+        s = s[:-3]
     return s
 
 
 def htmlify_messages( etd_data:dict ) -> str:
     s = ""
     for p in etd_data["problems"]:
-        s += p + "<br>"
+        s += p + "<br><br>"
     for a in etd_data["alerts"]:
-        s += a + "<br>"
+        s += a + "<br><br>"
     return s
 
 

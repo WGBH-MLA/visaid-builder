@@ -148,6 +148,12 @@ def parse_key_contrib( v: str ) -> dict:
         name = v.split("^")[0].strip()
         role = None        
 
+    # Perform some checks of common errors
+    if name.find(",") == -1:
+        problems.append("Warning: Normalized name has no comma.")
+    if len(name) < 7:
+        problems.append("Warning: Suspiciously short normalized name.")
+
     # Find all inline catear tags (capturing the alphanumeric characters directly following '^^')
     inline_tags = re.findall(r'\^\^(\w*)', v)
 
