@@ -42,6 +42,18 @@ HTML_EXT_SCRIPTS = """
 ############################################################################
 
 
+def aapb_html_link( guid:str, tp_time:str ) -> str:
+
+    tp_secs = ams_ingests.convert_tp_time(tp_time)
+    url = "https://americanarchive.org/catalog/"
+    url += guid
+    url += "?proxy_start_time="
+    url += tp_secs
+    link = f'<a href="{url}">{tp_secs}</a>'
+
+    return link
+
+
 def stringify_keys( d:dict) -> str:
     s = ""
 
@@ -144,7 +156,7 @@ def make_etd_table( outtable ):
         tr += f"<td class='small'>{r['asset_id']}</td>"
         tr += f"<td>{r['cataloger']}</td>"
         tr += f"<td class='small'>{r['export_date']}</td>"
-        tr += f"<td>{r['tp_time']}</td>"
+        tr += f"<td>{aapb_html_link(r['asset_id'],r['tp_time'])}</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
         tr += f"<td>{r['etd_data']['etd_type']}</td>"
         tr += f"<td><pre>{r['etd_text']}</pre></td>"
@@ -229,7 +241,7 @@ def make_chyron_data_table( outtable ):
         tr = "\n<tr>\n"
         tr += f"<td class='small'>{r['asset_id']}</td>"
         tr += f"<td>{r['cataloger']}</td>"
-        tr += f"<td>{r['tp_time']}</td>"
+        tr += f"<td>{aapb_html_link(r['asset_id'],r['tp_time'])}</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
         for f in ["name_as_written","name_normalized","person_attributes"]:
             val = r['etd_data']['chyron_data'][f]
@@ -312,7 +324,7 @@ def make_keyed_data_table( outtable ):
         tr = "\n<tr>\n"
         tr += f"<td class='small'>{r['asset_id']}</td>"
         tr += f"<td>{r['cataloger']}</td>"
-        tr += f"<td>{r['tp_time']}</td>"
+        tr += f"<td>{aapb_html_link(r['asset_id'],r['tp_time'])}</td>"
         tr += f"<td><img src='{r['img_data_uri']}'></td>"
         tr += f"<td>{stringify_keys(r['etd_data']['keyed_data'])}</td>"
         tr += f"<td><div class='fdata'>{htmlify_keyed_data(r['etd_data']['keyed_data'])}</div></td>"
@@ -447,7 +459,7 @@ def make_contrib_ingest_table( outtable ):
     for c in rows_data:
         tr = "\n<tr>\n"
         tr += f"<td class='small'>{c['asset_id']}</td>"
-        tr += f"<td>{c['tp_time']}</td>"
+        tr += f"<td>{aapb_html_link(r['asset_id'],r['tp_time'])}</td>"
         tr += f"<td><img src='{c['img_data_uri']}'></td>"
         tr += f"<td><pre>{c['etd_text']}</pre></td>"
         for f in contrib_fields:
@@ -497,14 +509,6 @@ def make_contrib_ingest_table( outtable ):
     html_str = html_start + html_table_start + rows + html_table_end + html_scripts + html_end
 
     return html_str
-
-
-def make_etd_atn_table( outtable ):
-
-    atn_outtable = [ r for r in outtable if r["etd_data"]["problems"] or r["etd_data"]["alerts"] ]
-    
-    return make_etd_table(atn_outtable)
-
 
 
 def make_attention_table( outtable ):
