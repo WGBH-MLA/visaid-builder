@@ -19,6 +19,7 @@ dependencies = [
 [project.scripts]
 visswt = "visaid_builder.use_swt:main"
 catdoor = "visaid_builder.catdoor.door:main"
+catherder = "visaid_builder.catherder.herder:main"
 
 [project.urls]
 "Homepage" = "https://github.com/WGBH-MLA/visaid_builder"
