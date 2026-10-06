@@ -74,6 +74,11 @@ def map_chyron_sec( r:dict ) -> dict:
     else:
         role = "Appearing"
 
+    if "omit-attributes" in r["etd_data"]["catear_data"]:
+        attributes = None
+    else:
+        attributes = r["etd_data"]["chyron_data"]["person_attributes"]
+
     contrib = {
         "contributor": r["etd_data"]["chyron_data"]["name_normalized"], 
         "annotation": r["etd_data"]["chyron_data"]["name_as_written"],  
@@ -82,7 +87,7 @@ def map_chyron_sec( r:dict ) -> dict:
         "affiliation": None, 
         "affiliation_annotation": aff_ann, 
         "contributor_role": role,
-        "contributor_role_annotation": r["etd_data"]["chyron_data"]["person_attributes"]
+        "contributor_role_annotation": attributes,
     }
     return contrib
 

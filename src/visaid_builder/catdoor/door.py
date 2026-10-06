@@ -15,6 +15,7 @@ format, where each row is an entry created on a cataid.
 import argparse
 from pathlib import Path
 import json
+from datetime import date
 
 from . import html_tables
 from . import ams_ingests
@@ -149,6 +150,9 @@ def main():
     catout_pattern = "*_catout*.json"
     catout_paths = []
 
+    # this will be set to something sensible if exactly 1 input path is passed in.
+    out_fname_morsel = ""
+
     for path_str in args.paths:
         input_path = Path(path_str)
 
@@ -160,6 +164,11 @@ def main():
             # Check if the single file matches our required naming convention
             if input_path.match(catout_pattern):
                 catout_paths.append(input_path)
+
+                # Also set the output filename morsel if this the only input
+                if len(args.paths) == 1:
+                    out_fname_morsel = "".join(c if c.isalnum() else "_" for c in input_path.stem)
+
             else:
                 print(f"Warning: File '{path_str}' does not match pattern {catout_pattern}. Skipping.")
             
@@ -167,6 +176,10 @@ def main():
             # Find all matching files within the directory
             matches = list(input_path.glob(catout_pattern))
             catout_paths.extend(matches)
+
+            # Also set the output filename morsel if this the only input
+            if len(args.paths) == 1:
+                out_fname_morsel = "".join(c if c.isalnum() else "_" for c in input_path.stem)
 
     # De-duplicate and sort for a clean list
     catout_paths = sorted(list(set(catout_paths)))
@@ -211,14 +224,13 @@ def main():
     if args.output:
         out_fname = args.output
     else:
-        base = "catout_" + args.type
         if args.type[:4] == "html":
-            ext = ".html"
+            ext = "html"
         elif args.type[:3] in ["csv", "ams"]:
-            ext = ".csv"
+            ext = "csv"
         else:
-            ext = ".txt"
-        out_fname = base + ext
+            ext = "txt"
+        out_fname = f"catdoor-{args.type}_{out_fname_morsel}_{date.today().isoformat()}.{ext}"
 
     if out_str:
         with open(out_fname, "w") as f:
