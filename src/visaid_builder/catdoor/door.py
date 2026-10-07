@@ -20,7 +20,7 @@ from datetime import date
 from . import html_tables
 from . import ams_ingests
 from . import parse_etd
-
+from .catherder import herd_cats
 
 def tablify_catouts( paths:list ) -> list:
     """
@@ -115,6 +115,8 @@ def main():
         "html-atn": "Show just the frames that need attention",
         "ams-con-basic": "Create CSV for AMS2 of barebones data values for contributors",
         "ams-con-full":  "Create CSV for AMS2 of all supported data fields for contributors",
+        "herd-cats": "Show the data values, and write all the frame images to "
+                     "a directory (default catpics) and dynamically loads the images from there",
     }
 
     cmd_description = 'Outputs information from a collection of cataid output (catout) files.\n\n'
@@ -137,6 +139,11 @@ def main():
         "-o", "--output",
         type=str,
         help="Path to the output file")
+    parser.add_argument("-i", "--image_directory",
+                        metavar="IMAGEOUTPATH",
+                        type=str,
+                        default="catpics",
+                        help="Relative path to the directory to save the images")
     parser.add_argument(
         "-t", "--type",
         metavar="TYPE",
@@ -214,6 +221,9 @@ def main():
         out_str = ams_ingests.make_basic_contrib_ingest(catout_table)
     elif args.type == "ams-con-full":        
         out_str = ams_ingests.make_full_contrib_ingest(catout_table)
+    elif args.type == "herd-cats":
+        herd_cats(catout_table, args.image_directory, args.output)
+        return
     elif args.type == "none":
         out_str = None
     else:
