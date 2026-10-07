@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 def main():
-    cmd_description = 'Creates a fixer html file from a directory of (catout) files'
+    cmd_description = 'Run fixing promts for file/files from a directory of (catout) files'
 
     parser = argparse.ArgumentParser(
         prog='catherder',
@@ -17,8 +17,11 @@ def main():
     parser.add_argument(
         "-o", "--output",
         type=str,
-        help="Path to the output file")
+        help="Path to the output directory (Use -overwrite if you want to overwrite the original files)")
 
+    parser.add_arguement("-overwrite",
+                         type=bool,
+                         help="Overwrite existing files with revised versions")
     catout_pattern = "*_catout*.json"
     catout_paths = []
 
