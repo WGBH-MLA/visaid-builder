@@ -1,20 +1,27 @@
+/**
+ * Relies on values from the DOM to make changes to classes to affect visibilit.
+ */
 function updateVis() {
-    // get status of scenes types from checkbox states
-    const sceneVis = {}; 
+    // get status of scenes types as set by the checkbox states
+    const sceneSetVis = {}; 
     for (const input of document.getElementsByTagName('input')) { 
         if (input.type === 'checkbox') {
-            sceneVis[input.value] = input.checked;
+            sceneSetVis[input.value] = input.checked;
         }
     }
-    // loop through each div of class "itemrow" and set visibility
+    // loop through each div of class "itemrow" and set classes related to visibility
     for (const el of document.querySelectorAll('.itemrow')) {
         let show = false;
-        if (sceneVis[el.dataset.scenetype]) {
-            if (!el.dataset.label.includes(" - - -") || sceneVis["scene subsample"] ) {
+        // we want to show if the scene type is set to visibile
+        if (sceneSetVis[el.dataset.scenetype]) {
+            // show only if the scene is not a subsample or subsamples are visible
+            if (!el.dataset.label.includes(" - - -") || sceneSetVis["scene subsample"] ) {
                  show = true;
             }
         }
-        if (sceneVis['engaged-vis']) {
+        // if we we're viewing all engaged secnes, we migth want to show this one
+        if (sceneSetVis['engaged-vis']) {
+            // check whether scene is engaged
             const rid = el.dataset.rid;
             const itemEdtEl = document.querySelector(`.item-editor[data-rid='${rid}']`)
             if (itemEdtEl.classList.contains("engaged")) {
@@ -31,6 +38,7 @@ function updateVis() {
         }
     }
 }
+
 function showAll() {
     const allInputs = document.getElementsByTagName('input');
     for (const input of allInputs) { 
@@ -40,6 +48,7 @@ function showAll() {
     }
     updateVis();
 }
+
 function showNone() {
     const allInputs = document.getElementsByTagName('input');
     for (const input of allInputs) { 
@@ -49,7 +58,9 @@ function showNone() {
     }
     updateVis();
 }
+
 let CATAID_MODE = false;
+
 function cataidMode() {
     document.getElementById('visaid-title-type').classList.add('hidden')
     document.getElementById('cataid-title-type').classList.remove('hidden')
@@ -95,6 +106,9 @@ function toggleMode() {
     }
 }
 
+/**
+ * Adjusts classlist of scene to "engage" it (which means showing its editor)
+ */
 function toggleEngagement() {
     const rid = this.dataset.rid;
     
@@ -108,14 +122,20 @@ function toggleEngagement() {
     }
 }
 
+/**
+ * Collects the values from engaged editor text docs and exports to a JSON file.
+ */
 function collectEdits () {
+    // check that we have a string identifying the cataloger
     const cataloger = document.getElementById("cataloger-blank").textContent.trim();
     if (!cataloger) {
         document.getElementById("cataloger-blank").classList.add('cataloger-blank-unfilled');
         return;
     }
+    // make sure the items we want are rendered visible (which can affect whiitespace in values)
     document.getElementById('engaged-vis').checked = true;
     updateVis();
+    // create and populate export data structure
     const dataExport = {};
     dataExport["asset_id"] = document.getElementById("video-id").dataset["videoId"];
     dataExport["cataid_id"] = document.getElementById("cataid-id").dataset["cataidId"];
@@ -148,6 +168,7 @@ function collectEdits () {
     }
     const mmifViewsMetadataEl = document.getElementById('mmif-views-metadata');
     dataExport["MMIF_views_metadata"] = JSON.parse(mmifViewsMetadataEl.textContent);
+    // serialize to JSON and create file-like object for export
     const outputJSON = JSON.stringify(dataExport, null, 2);
     const filedata = new Blob([outputJSON], {type: "application/json" });
     const url = window.URL.createObjectURL(filedata);
@@ -159,6 +180,9 @@ function collectEdits () {
     window.URL.revokeObjectURL(url);
 }
 
+/**
+ * Sets initial values and visibility for items on the page
+ */
 function initializePage() {
     // set visibility to match checkbox values
     updateVis();
