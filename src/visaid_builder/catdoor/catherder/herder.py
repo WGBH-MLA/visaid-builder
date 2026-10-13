@@ -2,7 +2,7 @@ from pathlib import Path
 
 from .image_writer import write_image
 from .html_constructor import html_file
-def herd_cats(catout_table, image_dir, output_path):
+def herd_cats(catout_table:list, image_dir:str, output_path:str) -> None:
 
     directory = Path(image_dir)
     directory.mkdir(parents=True, exist_ok=True)

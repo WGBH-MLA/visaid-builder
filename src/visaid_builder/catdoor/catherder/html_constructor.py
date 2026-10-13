@@ -32,7 +32,7 @@ class html_file:
         #used for error handling(trying to add a row before calling writeField, etc.)
         self.phase = 0
 
-    def write_html(self, file_name):
+    def write_html(self, file_name:str) -> None:
         if self.phase == 0: raise Exception(f"Called write_html out of phase, phase should be 1 or 2, phase is {self.phase}")
         if self.phase == 1:
             self.phase = 2
@@ -75,19 +75,19 @@ class html_file:
             f.write(self.html_str)
 
     #must be called before adding rows
-    def writeFields(self, fields=None):
+    def writeFields(self, fields=None) -> None:
         if fields is None:
             fields = ["asset ID", "cataloger", "export date", "time", "still image", "etd type", "etd text", "cat ears",
                       "cat ear data", "to attend to", "message", ]
 
-        if not self.phase == 0 : raise Exception(f"Called writeFields out of phase, phase should be 0, phase is {self.phase}")
+        if not self.phase == 0: raise Exception(f"Called writeFields out of phase, phase should be 0, phase is {self.phase}")
         self.phase = 1
         self.html_str += "<table id='catdoor'><thead><tr>\n"
         for f in fields:
             self.html_str += f"<th>{f}</th>"
         self.html_str += "\n</tr></thead>\n<tbody>"
 
-    def addRow(self, row, image_path):
+    def addRow(self, row:dict, image_path:str) -> None:
         if not (self.phase == 1): raise Exception(f"Called addRow out of phase, phase should be 1, phase is {self.phase}")
         self.html_str += "\n<tr>\n"
         self.html_str += f"<td class='small'>{row['asset_id']}</td>"

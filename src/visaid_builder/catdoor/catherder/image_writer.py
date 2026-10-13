@@ -1,7 +1,7 @@
 import base64
 import io
 
-def write_image(image_fname, bs64_image):
+def write_image(image_fname:str, bs64_image:str) -> None:
     # just decodes the b64 string to bytes in order to write to file.
     # Has to use wb(write binary) for this
     buf = io.BytesIO()
