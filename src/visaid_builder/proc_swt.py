@@ -37,6 +37,7 @@ The valid keys for `params_in` are as follows:
 
 import json
 import logging
+import copy
 from pprint import pprint 
 
 from mmif import Mmif
@@ -55,18 +56,20 @@ PROC_SWT_DEFAULTS = { "default_to_none": True,
                       "exclude": [],
                       "max_unsampled_gap": 60000,
                       "subsampling": { 
-                          "bars": 120100,
-                          "credits": 1900,
-                          "chyron": 15100,
-                          "person & chyron": 15100,
-                          "other text": 4900,
-                          "slate": 9900 },
-                      "default_subsampling": 30100,
-                      "include_first_time": False,
-                      "include_final_time": False }
+                          "bars": 30000,
+                          "slate": 5000,
+                          "chyron and person": 4000,
+                          "person with text": 15000,
+                          "filmed text": 15000,
+                          "other text": 6000,
+                          "credits": 2000,
+                          },
+                      "default_subsampling": 30000,
+                      "include_first_time": True,
+                      "include_final_time": True }
 
 SUBSAMPLE_LABEL_SUFFIX = " - - -"
-
+EXTRA_REP_LABEL_SUFFIX = " - + -"
 
 def get_swt_view_ids(usemmif:Mmif):
     """
@@ -394,28 +397,221 @@ def tfsd_from_mmif( usemmif:Mmif,
 
 
 
-def adjust_tfsd( tfsd_in:list, 
+def add_scene_subsamples( tfsd:list,
+                          subsampling_params:dict,
+                          default_subsampling:int,
+                          ) -> dict:
+    """
+    Adds extra samples for longer scenes.
+    """
+    tfsd = copy.deepcopy(tfsd)
+
+    # First, collect the subsampling thresholds for each scene type
+    if default_subsampling is None:
+        # no default subsampling; just use subsampling specified in params dictionary
+        subsampling = copy.deepcopy(subsampling_params)
+    else:
+        # assign subsampling for all frame types
+        subsampling = {}
+        tf_labels = set( [ tf["tf_label"] for tf in tfsd ] )
+        for label in tf_labels:
+            # go ahead and set subsampling for all labels to the default value
+            subsampling[label] = default_subsampling
+        if subsampling_params:
+            # overwrite the default value for subsampling values specified in params dictionary
+            for label in subsampling_params:
+                subsampling[label] = subsampling_params[label]
+
+    # Check for and remove invalid subsampling threshold values
+    invalid_subsamples = []
+    for scenetype in subsampling:
+        if not ( subsampling[scenetype] > 0 and subsampling[scenetype] < 9000000 ):
+            logging.warning("Ignoring invalid scene sampling:", scenetype, ":", subsampling[scenetype])
+            invalid_subsamples.append(scenetype)
+    for scenetype in invalid_subsamples:
+        del subsampling[scenetype]
+
+    # collect new rows for the new samples
+    new_scenes = []
+
+    # iterate through scene rows of tfsd for which the label is subejct to subsampling
+    for tf in [ tf for tf in tfsd if tf["tf_label"] in subsampling]:
+
+        # duration for the entire scene
+        scene_dur = tf["end"] - tf["start"]
+
+        # check to see whether this scene meets the subsampling threshold for its label
+        if scene_dur > subsampling[tf["tf_label"]] :
+
+            # We want enough subsample scenes so that each is shorter than the 
+            # subsampling threshold.
+            # Example: 36s scene with 10s subsampling -> 4 x 9s subsample scenes
+            num_subsamples = ( scene_dur // subsampling[tf["tf_label"]] ) + 1        
+            subsample_dur = scene_dur // num_subsamples
+
+            subsamples = []           # subsample scenes to be collected for this scene
+            next_start = tf["start"]  # first subsample starts at start of the long scene
+            
+            for _ in range(num_subsamples):
+                subsample_id = tf["tf_id"] + "_s_" + str(len(subsamples))
+                subsample_label = tf["tf_label"] + SUBSAMPLE_LABEL_SUFFIX
+                subsample_start = next_start
+                subsample_end = next_start + subsample_dur
+                subsample_rep = next_start + ( subsample_dur // 2 )
+                subsample_text = tf["text"]
+
+                subsample = {
+                    "tf_id": subsample_id,
+                    "tf_label": subsample_label,
+                    "start": subsample_start,
+                    "end": subsample_end, 
+                    "tp_time": subsample_rep,
+                    "tp_label": None,
+                    "tp_id": None,
+                    "td_id": None,
+                    "text": subsample_text }
+                subsamples.append(subsample)
+
+                next_start = subsample_end
+            
+            # Done with this scene.  Add new samples to running list of new scenes
+            new_scenes += subsamples
+
+    # Done iterating through labeled scenes.  Add the new scenes the main list.
+    tfsd += new_scenes
+
+    return tfsd
+
+
+
+def add_gap_samples( tfsd:dict, 
+                     max_gap:int, 
+                     first_time:int,
+                     final_time:int,
+                     ) -> dict:
+    """
+    Algorithm for adding extra scenes to see into the gaps between labeled
+    scenes.
+
+    The `max_gap` value controls the largest gap between scenes that does
+    not trigger interspersal of new scenes.
+    """
+    tfsd = copy.deepcopy(tfsd)
+
+    # Sort just in case it was not already sorted
+    tfsd.sort(key=lambda f:f["start"])
+
+    # Add frames for first and final timepoints. These will be removed later.
+    # (This is necessary to find gaps before the first scene annotation and after
+    # the last scene annotation.)
+    first = {
+      "tf_id": 'dummy1',
+      "start": first_time,
+      "end": first_time, 
+      "tp_time": first_time,
+    }
+    tfsd.insert(0, first)
+    final = {
+      "tf_id": 'dummy2',
+      "start": final_time,
+      "end": final_time, 
+      "tp_time": final_time,
+    }
+    tfsd.append(final)
+
+    # Samples scenes are primarily useful for their central frame, but they need 
+    # a duration to be represented in the tfsd data structure.
+    #
+    # As long as the duration is less than the maximum gap, then the choice of 
+    # sample duration is somewhat arbitrary.  One option would be to make the 
+    # duration 0, but a non-zero duration is more like the rest of the scenes.
+    sample_dur = max_gap // 2
+
+    # collect samples to add to the main table of scenes
+    samples = []
+
+    # index for use in the scene's id and label
+    next_sample_num = 1
+
+    # Iterate through existing time frames to identify gaps in which to 
+    # insert samples.  Specifically, for each time frame, after the first,
+    # look back to see how much time since the last one.  If that gap is 
+    # bigger than the max_gap, then make one or more samples.
+    for rnum in range(1, len(tfsd)) :
+        
+        # calculate the distance between the start of the current frame
+        # and the end of the previous
+        full_gap = tfsd[rnum]["start"] - tfsd[rnum-1]["end"]
+
+        if full_gap > max_gap :
+
+            # Figure out how many samples to make
+            num_samples = full_gap // max_gap
+
+            # Calculate the size of the gaps within which we'll locate new samples
+            gap_size = full_gap // num_samples
+
+            # collect samples (we'll add them into tfsd later)
+            for sample_count in range(num_samples):
+
+                # gap starts from the end of the last main scene, then offset by the
+                # samples we've already made in this full gap
+                gap_start = tfsd[rnum-1]["end"] + ( sample_count * gap_size )
+
+                sample_id = "s_" + str(next_sample_num)                    
+                sample_label = "unlabeled sample"
+                sample_start = gap_start + (gap_size - sample_dur)//2
+                sample_end = sample_start + sample_dur
+                sample_rep = sample_start + sample_dur//2
+
+                sample = {
+                    "tf_id": sample_id,
+                    "tf_label": sample_label,
+                    "start": sample_start,
+                    "end": sample_end, 
+                    "tp_time": sample_rep,
+                    "tp_label": None,
+                    "tp_id": None,
+                    "td_id": None,
+                    "text": None }
+                samples.append(sample)
+
+                next_sample_num += 1
+
+    # add all the samples collected to the tfsd list 
+    tfsd += samples
+
+    # remove dummy first and last frames    
+    tfsd = [ tf for tf in tfsd if tf["tf_id"] not in ['dummy1','dummy2'] ]
+
+    return tfsd
+
+
+
+def adjust_tfsd( tfsd:list, 
                  first_time:int,
                  final_time:int,
-                 params_in:dict ):
+                 params_in:dict 
+                 ) -> dict:
     """
     Adds and/or removes rows to the array returned by `tfsd_from_mmif()`.  
 
-    The data structure for the table output is the same as in the input `tfsd` table.
+    The data structure for the table output is the same as in the input 
+    `tfsd` table.
 
-    Ajdustments are made on the basis of the parameter values passed in.
+    Adjustments are made on the basis of the parameter values passed in.
 
     Primary functionality is to
       - include only certain scene types
       - exclude certain scene types
+      - sub-sample long scenes
+      - sample gaps between labeled scenes
       - add a scene for the first frame checked
       - add a scene for the last frame checked
-      - sample gaps between labeled scenes
-      - sub-sample long scenes
     """
 
-    # Make a (shallow) copy of the input list, so not to alter it
-    tfsd = tfsd_in[:]
+    # Make a copy of the input list, so not to alter it
+    tfsd = copy.deepcopy(tfsd)
 
     # Check for the the values we need
     if first_time is None or final_time is None:
@@ -455,208 +651,51 @@ def adjust_tfsd( tfsd_in:list,
     # Go ahead and filter out scene types, according to parameters
     if params["include_only"] is not None:
         tfsd = [ tf for tf in tfsd if tf["tf_label"] in params["include_only"] ]
-    
     if params["exclude"] is not None and len(params["exclude"]) > 0:
         tfsd = [ tf for tf in tfsd if tf["tf_label"] not in params["exclude"] ]
-    
-    # Sort just in case it was not already sorted
-    tfsd.sort(key=lambda f:f["start"])
 
-    # Add frames for first and final timepoints.
-    # These may be removed later, but we add them for now.
-    # (The main reason for this is that we want to be able to find gaps where
-    # there are no scene annotations, including the beginning and end of the video.
-    # Logically, scene gaps must be between seens.  So we need beginning and ending
-    # scenes in order to catch the gaps.)
-    first = {
-      "tf_id": 'f_0',
-      "tf_label": 'first frame checked',
-      "start": first_time,
-      "end": first_time, 
-      "tp_time": first_time,
-      "tp_label": None,
-      "tp_id": None,
-      "td_id": None,
-      "text": None }
-    tfsd.insert(0, first)
-
-    final = {
-      "tf_id": 'f_n',
-      "tf_label": 'last frame checked',
-      "start": final_time,
-      "end": final_time, 
-      "tp_time": final_time,
-      "tp_label": None,
-      "tp_id": None,
-      "td_id": None,
-      "text": None }
-    tfsd.append(final)
-
-    #
-    # Gap sampling
-    # 
-    # If this parameter has been passed in with a non-zero value to the function, 
-    # then intersperse sampled of non-labeled scenes among labeled scenes.
-    #
-    # The "max_unsampled_gap" value controls the largest gap between scenes that does
-    # not trigger the addtition of interspersed samples.
-    # 
-    if params["max_unsampled_gap"]: 
-        max_gap = params["max_unsampled_gap"]
-
-        # Samples scenes are primarily useful for their central frame, but they need a 
-        # duration to be represented in the tfsd data structure.
-        #
-        # As long as the duration is less than the maximum gap, then the choice of sample
-        # duration is somewhat arbitrary.
-        sample_dur = max_gap // 2
-
-        # collect samples to add to the main table of scenes
-        samples = []
-
-        # index for use in the scene's id and label
-        next_sample_num = 1
-
-        # Iterate through existing time frames to identify gaps in which to 
-        # insert samples.  Specifically, for each time frame, after the first,
-        # look back to see how much time since the last one.  If that gap is 
-        # bigger than the max_gap, then make one or more samples.
-        for rnum in range(1, len(tfsd)) :
-            
-            # calculate the distance between the start of the current frame
-            # and the end of the previous
-            full_gap = tfsd[rnum]["start"] - tfsd[rnum-1]["end"]
-
-            if full_gap > max_gap :
-
-                # Figure out how many samples to make
-                num_samples = full_gap // max_gap
-
-                # Calculate the size of the gaps within which we'll locate new samples
-                gap_size = full_gap // num_samples
-
-                # collect samples (we'll add them into tfsd later)
-                for sample_count in range(num_samples):
-
-                    # gap starts from the end of the last main scene, then offset by the
-                    # samples we've already made in this full gap
-                    gap_start = tfsd[rnum-1]["end"] + ( sample_count * gap_size )
-
-                    sample_id = "s_" + str(next_sample_num)                    
-                    sample_label = "unlabeled sample"
-                    sample_start = gap_start + (gap_size - sample_dur)//2
-                    sample_end = sample_start + sample_dur
-                    sample_rep = sample_start + sample_dur//2
-
-                    sample = {
-                        "tf_id": sample_id,
-                        "tf_label": sample_label,
-                        "start": sample_start,
-                        "end": sample_end, 
-                        "tp_time": sample_rep,
-                        "tp_label": None,
-                        "tp_id": None,
-                        "td_id": None,
-                        "text": None }
-                    samples.append(sample)
-
-                    next_sample_num += 1
-
-        # add all the samples collected to the tfsd list 
-        tfsd += samples
-
-    # 
-    # Scene subsampling
-    # (Add extra samples scenes for longer scenes (especially, e.g., credits sequences) )
-    #
+    # Scene subsampling: Add extra samples scenes for longer scenes
+    # (We do this before the gap sampling so that that scenes created from the gap
+    #  sampling cannot be given subsamples.)
     if params["subsampling"] is not None or params["default_subsampling"] is not None:
+        tfsd = add_scene_subsamples( tfsd, params["subsampling"], params["default_subsampling"] )
 
-        # First, collect the subsampling thresholds for each scene type
-        subsampling = {}
-        if params["default_subsampling"] is None:
-            # no default subsampling; just use subsampling specified in params dictionary
-            subsampling = params["subsampling"]
-        else:
-            # assign subsampling for all frame types
-            bin_labels = set( [ tf["tf_label"] for tf in tfsd_in ] )
-            for label in bin_labels:
-                # go ahead and set subsampling for all labels to the default value
-                subsampling[label] = params["default_subsampling"]
-            if params["subsampling"]:
-                # overwrite the default value for subsampling values specified in params dictionary
-                for label in params["subsampling"]:
-                    subsampling[label] = params["subsampling"][label]
+    # Gap sampling:  If this parameter has been passed in with a non-zero value, 
+    # then intersperse sample non-labeled scenes among labeled scenes.
+    if params["max_unsampled_gap"]:
+        tfsd = add_gap_samples( tfsd, params["max_unsampled_gap"], first_time, final_time )
 
-        # Check for and remove invalid subsampling threshold values
-        invalid_subsamples = []
-        for scenetype in subsampling:
-            if not ( subsampling[scenetype] > 0 and subsampling[scenetype] < 9000000 ):
-                logging.warning("Ignoring invalid scene sampling:", scenetype, ":", subsampling[scenetype])
-                invalid_subsamples.append(scenetype)
-        for scenetype in invalid_subsamples:
-            del subsampling[scenetype]
-
-        # collect new rows for the new samples
-        new_scenes = []
-
-        # iterate through scene rows of tfsd for which the label is subejct to subsampling
-        for tf in [ tf for tf in tfsd if tf["tf_label"] in subsampling]:
-
-            # duration for the entire scene
-            scene_dur = tf["end"] - tf["start"]
-
-            # check to see whether this scene meets the subsampling threshold for its label
-            if scene_dur > subsampling[tf["tf_label"]] :
-
-                # We want enough subsample scenes so that each is shorter than the 
-                # subsampling threshold.
-                # Example: 36s scene with 10s subsampling -> 4 x 9s subsample scenes
-                num_subsamples = ( scene_dur // subsampling[tf["tf_label"]] ) + 1        
-                subsample_dur = scene_dur // num_subsamples
-
-                subsamples = []           # subsample scenes to be collected for this scene
-                next_start = tf["start"]  # first subsample starts at start of the long scene
-                
-                for _ in range(num_subsamples):
-                    subsample_id = tf["tf_id"] + "_s_" + str(len(subsamples))
-                    subsample_label = tf["tf_label"] + SUBSAMPLE_LABEL_SUFFIX
-                    subsample_start = next_start
-                    subsample_end = next_start + subsample_dur
-                    subsample_rep = next_start + ( subsample_dur // 2 )
-                    subsample_text = tf["text"]
-
-                    subsample = {
-                        "tf_id": subsample_id,
-                        "tf_label": subsample_label,
-                        "start": subsample_start,
-                        "end": subsample_end, 
-                        "tp_time": subsample_rep,
-                        "tp_label": None,
-                        "tp_id": None,
-                        "td_id": None,
-                        "text": subsample_text }
-                    subsamples.append(subsample)
-
-                    next_start = subsample_end
-                
-                # Done with this scene.  Add new samples to running list of new scenes
-                new_scenes += subsamples
-
-        # Done iterating through labeled scenes.  Add the new scenes the main list.
-        tfsd += new_scenes
-
+    # Add first and final scenes, if appropriate
+    if params["include_first_time"]:
+        first = {
+            "tf_id": 'f_0',
+            "tf_label": 'first frame checked',
+            "start": first_time,
+            "end": first_time, 
+            "tp_time": first_time,
+            "tp_label": None,
+            "tp_id": None,
+            "td_id": None,
+            "text": None, 
+            }
+        tfsd.insert(0, first)
+    if params["include_final_time"]:
+        final = {
+            "tf_id": 'f_n',
+            "tf_label": 'last frame checked',
+            "start": final_time,
+            "end": final_time, 
+            "tp_time": final_time,
+            "tp_label": None,
+            "tp_id": None,
+            "td_id": None,
+            "text": None,
+            }
+        tfsd.append(final)        
         
-    # If appropriate, remove first frame and final scenes (which were inserted above)
-    to_remove = []
-    if not params["include_first_time"]:
-        to_remove.append('f_0')
-    if not params["include_final_time"]:
-        to_remove.append('f_n')
-    if len(to_remove) > 0:
-        tfsd = [ tf for tf in tfsd if tf["tf_id"] not in to_remove ]
-
     tfsd.sort(key=lambda f:f["start"])
     return tfsd
+
 
 
 def tfsd_to_tfs(tfsd:list):
@@ -684,6 +723,7 @@ def tfsd_to_tfs(tfsd:list):
         tfs.append(tf)
 
     return tfs
+
 
 
 def find_overlaps( tfsd: list) -> list:
@@ -735,6 +775,7 @@ def display_tfs(tfs:list):
                          lilhelp.tconv(f[3]), 
                          f[1] ]]
     pprint(tfs_pretty)
+
 
 
 def display_tfsd(tfsd:list):

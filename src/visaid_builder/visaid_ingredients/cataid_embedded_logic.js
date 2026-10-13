@@ -1,3 +1,6 @@
+const SUBSAMPLE_LABEL_SUFFIX = " - - -"
+const EXTRA_REP_LABEL_SUFFIX = " - + -"
+
 /**
  * Relies on values from the DOM to make changes to classes to affect visibilit.
  */
@@ -15,8 +18,10 @@ function updateVis() {
         // we want to show if the scene type is set to visibile
         if (sceneSetVis[el.dataset.scenetype]) {
             // show only if the scene is not a subsample or subsamples are visible
-            if (!el.dataset.label.includes(" - - -") || sceneSetVis["scene subsample"] ) {
-                 show = true;
+            if ( !( el.dataset.label.includes(SUBSAMPLE_LABEL_SUFFIX) ||
+                    el.dataset.label.includes(EXTRA_REP_LABEL_SUFFIX) )  
+                 || sceneSetVis["scene subsample"] ) {
+                show = true;
             }
         }
         // if we we're viewing all engaged secnes, we migth want to show this one
