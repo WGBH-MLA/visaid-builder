@@ -289,49 +289,30 @@ def tfsd_from_mmif( usemmif:Mmif,
         ver = tuple( map(int, get_CLAMS_app_ver(usemmif, td_view_id)[1:].split('.') ) )
         # print("**** verison: ", ver) #DIAG
 
-        if td_view.metadata.app.find("smolvlm2") > -1 and ver < (1, 0):
-            # smolvlm2-captioner pre-v1.0-beta-style
-            #print("**** LEGACY") # DIAG
+        # New view structure May 2026 (does not work with pre-v1.0 release of SmolVLM2 
+        # captioner)
 
-            # First, get mapping of TD ann to its source TP ann
-            tas = {}
-            for ann in td_view.get_annotations(AnnotationTypes.Alignment):
-                tas[ann.get_property("target")] = ann.get_property("source") 
+        # First, get mapping of TD ann to its source TF ann
+        tas = {}
+        for ann in td_view.get_annotations(AnnotationTypes.Alignment):
+            tas[ann.get_property("target")] = ann.get_property("source") 
+        
+        # Build a list of TD anns along with source TF
+        for ann in td_view.get_annotations(DocumentTypes.TextDocument):
+            td = {}
+            td["td_id"] = ann.get_property("id")
+            td["text"] = ann.get_property("text").value
 
-            # Build a list of TD anns along with source TP
-            for ann in td_view.get_annotations(DocumentTypes.TextDocument):
-                td = {}
-                td["td_id"] = ann.get_property("id")
-                td["tf_id"] = ann.get_property("origin")
-                td["tp_id"] = tas[td["td_id"]]
-                td["text"] = ann.get_property("text").value
-                tds.append(td)
+            # get the TF ann ID from the alignment annotation dictionary
+            td["tf_id"] = tas[td["td_id"]]
 
-        else:
-            # New view structure May 2026
-            #print("**** MODERN") # DIAG
+            # get the TP ann ID from the *first* item in the origins property
+            if len(ann.get_property("origins")):
+                td["tp_id"] = ann.get_property("origins")[0]
+            else:
+                td["tp_id"] = None
 
-            # First, get mapping of TD ann to its source TF ann
-            tas = {}
-            for ann in td_view.get_annotations(AnnotationTypes.Alignment):
-                tas[ann.get_property("target")] = ann.get_property("source") 
-            
-            # Build a list of TD anns along with source TF
-            for ann in td_view.get_annotations(DocumentTypes.TextDocument):
-                td = {}
-                td["td_id"] = ann.get_property("id")
-                td["text"] = ann.get_property("text").value
-
-                # get the TF ann ID from the alignment annotation dictionary
-                td["tf_id"] = tas[td["td_id"]]
-
-                # get the TP ann ID from the *first* item in the origins property
-                if len(ann.get_property("origins")):
-                    td["tp_id"] = ann.get_property("origins")[0]
-                else:
-                    td["tp_id"] = None
-
-                tds.append(td)
+            tds.append(td)
 
 
     # Collect TP anns
