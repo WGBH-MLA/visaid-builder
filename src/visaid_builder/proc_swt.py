@@ -260,8 +260,9 @@ def tfsd_from_mmif( usemmif:Mmif,
       (4) "tp_time":  representative still time in milliseconds (int)
       (5) "tp_label": representative still point label (string)
       (-) "tp_id":    TimePoint ID (from MMIF file) of representative time point
-      (-) "td_id":    TextDocument ID (from MMIF file)
       (-) "text":     text from the TextDocument
+      (-) "td_anns":  Dictionary of TextDocument annotations keyed to the
+                      annotation ID (from MMIF file)
     """
 
     # Start with an empty list of TimeFrame annotations
@@ -281,40 +282,6 @@ def tfsd_from_mmif( usemmif:Mmif,
         logging.info("MMIF file contained no captioner TextDocument annotations.")
         td_view = None
 
-    # Collect TD annotations 
-    # (list of dictionaries of TDs)
-    tds = []
-    if td_view is not None:
-
-        ver = tuple( map(int, get_CLAMS_app_ver(usemmif, td_view_id)[1:].split('.') ) )
-        # print("**** verison: ", ver) #DIAG
-
-        # New view structure May 2026 (does not work with pre-v1.0 release of SmolVLM2 
-        # captioner)
-
-        # First, get mapping of TD ann to its source TF ann
-        tas = {}
-        for ann in td_view.get_annotations(AnnotationTypes.Alignment):
-            tas[ann.get_property("target")] = ann.get_property("source") 
-        
-        # Build a list of TD anns along with source TF
-        for ann in td_view.get_annotations(DocumentTypes.TextDocument):
-            td = {}
-            td["td_id"] = ann.get_property("id")
-            td["text"] = ann.get_property("text").value
-
-            # get the TF ann ID from the alignment annotation dictionary
-            td["tf_id"] = tas[td["td_id"]]
-
-            # get the TP ann ID from the *first* item in the origins property
-            if len(ann.get_property("origins")):
-                td["tp_id"] = ann.get_property("origins")[0]
-            else:
-                td["tp_id"] = None
-
-            tds.append(td)
-
-
     # Collect TP anns
     # (dictionary keyed by TP ann ID)
     tps = {}
@@ -323,59 +290,106 @@ def tfsd_from_mmif( usemmif:Mmif,
             "time": ann.get_property("timePoint"),
             "tp_label": ann.get_property("label") }
 
-    # Build up the list of TF anns
+    # Collect TD anns
+    # (dictionary keyed by TD ann ID)
+    tds = {}
+    if td_view is not None:
+        # First, get mapping of TD ann to its source TF ann
+        tas = {}
+        for ann in td_view.get_annotations(AnnotationTypes.Alignment):
+            tas[ann.get_property("target")] = ann.get_property("source") 
+        
+        # Add TD anns to a dictionary
+        for ann in td_view.get_annotations(DocumentTypes.TextDocument):
+            # get the list of TP ann IDs from the origins property
+            tpis = ann.get_property("origins")
+            origins = sorted( tpis, key = lambda i:tps[i]["time"] )
+            tds[ann.get_property("id")] = {
+                "text": ann.get_property("text").value,
+                "tf_id": tas[ann.get_property("id")],
+                "origins_tp_ids": origins,
+                "first_time": tps[origins[0]]["time"] }
+
+    # Build up the list of TF annotations to make the `tfsd` list
     # (list of dictionaries of TFs)
     for ann in tf_view.get_annotations(AnnotationTypes.TimeFrame):
         tf = {}
+
+        # Set basic values
         tf["tf_id"] = ann.get_property("id")
         tf["tf_label"] = ann.get_property("label")
-        
-        # iterate through target TPs to get start time and end time
-        tf["start"] = 36000000 # 10 hours
-        tf["end"] = -1
+
+        # Filter `tds` down to just those aligned with this TF.
+        tf_tds = { td:tds[td] for td in tds if tds[td]["tf_id"] == tf["tf_id"] }
+
+        # Iterate through target TPs to get start time and end time
+        t0 = 36000000 # 10 hours
+        tn = -1
         for tp_id in ann.get_property("targets"):
-            if tps[tp_id]["time"] < tf["start"]:
-                tf["start"] = tps[tp_id]["time"]
-            if tps[tp_id]["time"] > tf["end"]:
-                tf["end"] = tps[tp_id]["time"]
+            if tps[tp_id]["time"] < t0:
+                t0 = tps[tp_id]["time"]
+            if tps[tp_id]["time"] > tn:
+                tn = tps[tp_id]["time"]
+        tf["start"] = t0
+        tf["end"] = tn
 
-        # see if we have data from a TD
-        tftds = [ td for td in tds if td["tf_id"] == tf["tf_id"] ]
-        if not len(tftds):
-            tf["td_id"] = None
-            tf["text"] = None
+        # Now we need to choose a represenative TP for this TF - the "tp_id"
+        reps = sorted( ann.get_property("representatives"), 
+                       key=lambda i:tps[i]["time"] )
+        # First check for an eligible one from an associated TD.
+        # (If there are any from the TD origins that is also a rep TP for this TF,
+        # then choose the first of those.)
+        td_origins_tp_ids = []
+        if len(tf_tds):
+            # build a list of all the TD origin TP ids for this TF
+            for td in tf_tds:
+                td_origins_tp_ids += tf_tds[td]["origins_tp_ids"]
+            eligibles = [i for i in reps if i in td_origins_tp_ids]
         else:
-            if len(tftds) > 1:
-                logging.info(f'More than one TextDocument annotation for TimeFrame {tf["tf_id"]}')
-            td = tftds[0]
-            tf["td_id"] = td["td_id"]
-            tf["text"] = td["text"]
-            if td["tp_id"] in ann.get_property("representatives"):
-                # we have a rep chosen by the TextDocumemnt annotator; choose that as the TF rep
-                tf["tp_id"] = td["tp_id"]
+            # if there were not TDs for this TF, the eligibles are just the reps
+            eligibles = reps[:]
+        # choose one from the middle
+        tf["tp_id"] = eligibles[ (len(eligibles)-1)//2 ]
 
-        # if we didn't get a rep TP before, then we have to choose one
-        if "tp_id" not in tf:
-            reps = []
-            for tp_id in ann.get_property("representatives"):
-                rep = { "tp_id": tp_id, 
-                        "time": tps[tp_id]["time"] }
-                reps.append(rep)
-            reps.sort(key=lambda f:f["time"])
-
-            # choose one from the middle
-            tf["tp_id"] = reps[ (len(reps)-1)//2 ]["tp_id"] 
-
-        # Now that we definitely have a rep, set the rep's time and label
+        # Now that we a rep, set the rep's time and label
         tf["tp_time"] = tps[tf["tp_id"]]["time"]
         tf["tp_label"] = tps[tf["tp_id"]]["tp_label"]
 
         tfsd.append(tf)
 
+        # Now we need to associate text documents data with the TF
+        tf["td_anns"] = tf_tds
+        # The text associated with the TF is concatenation of all the TDs.
+        if tf_tds:
+            # want to order the TDs by the time of their first rep time point
+            td_list = [ tf_tds[i] for i in tf_tds ]
+            td_list.sort(key= lambda d:d["first_time"])
+            td_text_list = [ t["text"] for t in td_list ]
+            tds_text = merge_td_texts(td_text_list)
+            tf["text"] = tds_text
+        else:
+            tf["text"] = None
+      
+
     # all done; sort and return
     tfsd.sort(key=lambda f:f["start"])
     return tfsd
 
+
+
+def merge_td_texts( texts:list ) -> str:
+
+    # remove consecutive duplicates
+    deduped = []
+    last = ""
+    for td in texts:
+        if td.strip() != last:
+            deduped.append( td.strip() )
+            last = td.strip()
+
+    merged = ("\n\n".join(deduped)).strip()
+
+    return merged
 
 
 def add_scene_subsamples( tfsd:list,
@@ -449,7 +463,7 @@ def add_scene_subsamples( tfsd:list,
                     "tp_time": subsample_rep,
                     "tp_label": None,
                     "tp_id": None,
-                    "td_id": None,
+                    "td_anns": None,
                     "text": subsample_text }
                 subsamples.append(subsample)
 
@@ -553,7 +567,7 @@ def add_gap_samples( tfsd:dict,
                     "tp_time": sample_rep,
                     "tp_label": None,
                     "tp_id": None,
-                    "td_id": None,
+                    "td_anns": None,
                     "text": None }
                 samples.append(sample)
 
@@ -656,7 +670,7 @@ def adjust_tfsd( tfsd:list,
             "tp_time": first_time,
             "tp_label": None,
             "tp_id": None,
-            "td_id": None,
+            "td_anns": None,
             "text": None, 
             }
         tfsd.insert(0, first)
@@ -669,7 +683,7 @@ def adjust_tfsd( tfsd:list,
             "tp_time": final_time,
             "tp_label": None,
             "tp_id": None,
-            "td_id": None,
+            "td_anns": None,
             "text": None,
             }
         tfsd.append(final)        
@@ -763,7 +777,7 @@ def display_tfsd(tfsd:list):
     """
     This function simply prints a simple table of TimeFrame annotations from a tfsd table
     """
-    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","td_id","text"]
+    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","td_ids","text"]
 
     for tf in tfsd:
         line = ""
