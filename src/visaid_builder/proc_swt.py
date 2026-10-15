@@ -261,8 +261,19 @@ def tfsd_from_mmif( usemmif:Mmif,
       (5) "tp_label": representative still point label (string)
       (-) "tp_id":    TimePoint ID (from MMIF file) of representative time point
       (-) "text":     text from the TextDocument
-      (-) "td_anns":  Dictionary of TextDocument annotations keyed to the
+      (-) "reps":     dictionary of TimePoint annoations that are the representatives
+                      for this TimeFrame
+           (-) "time"
+           (-) "tp_label"
+      (-) "td_anns":  dictionary of TextDocument annotations keyed to the
                       annotation ID (from MMIF file)
+           (-) "text"
+           (-) "tf_id"
+           (-) "origins_tp_ids"
+           (-) "first_time"
+    
+    The "reps" and "td_anns" values are used only for subsampling and pulling the 
+    TD annotations from particular reps.
     """
 
     # Start with an empty list of TimeFrame annotations
@@ -355,10 +366,6 @@ def tfsd_from_mmif( usemmif:Mmif,
         tf["tp_time"] = tps[tf["tp_id"]]["time"]
         tf["tp_label"] = tps[tf["tp_id"]]["tp_label"]
 
-        tfsd.append(tf)
-
-        # Now we need to associate text documents data with the TF
-        tf["td_anns"] = tf_tds
         # The text associated with the TF is concatenation of all the TDs.
         if tf_tds:
             # want to order the TDs by the time of their first rep time point
@@ -369,7 +376,14 @@ def tfsd_from_mmif( usemmif:Mmif,
             tf["text"] = tds_text
         else:
             tf["text"] = None
-      
+
+        # Get the reps for this TF
+        tf["reps"] = { tp:tps[tp] for tp in tps if tp in reps }
+
+        # Now we need to associate text documents data with the TF
+        tf["td_anns"] = tf_tds
+
+        tfsd.append(tf)
 
     # all done; sort and return
     tfsd.sort(key=lambda f:f["start"])
@@ -378,7 +392,11 @@ def tfsd_from_mmif( usemmif:Mmif,
 
 
 def merge_td_texts( texts:list ) -> str:
-
+    """
+    Take a list of strings (typically multi-line screen OCRs).
+    Marges them into a single longer string.
+    (Removes consecutive duplicates)
+    """
     # remove consecutive duplicates
     deduped = []
     last = ""
@@ -392,12 +410,16 @@ def merge_td_texts( texts:list ) -> str:
     return merged
 
 
+
 def add_scene_subsamples( tfsd:list,
                           subsampling_params:dict,
                           default_subsampling:int,
                           ) -> dict:
     """
     Adds extra samples for longer scenes.
+
+    Uses extra representatives if they're there.  Otherwise performs
+    arithmetic subampling.
     """
     tfsd = copy.deepcopy(tfsd)
 
@@ -429,48 +451,106 @@ def add_scene_subsamples( tfsd:list,
     # collect new rows for the new samples
     new_scenes = []
 
-    # iterate through scene rows of tfsd for which the label is subejct to subsampling
-    for tf in [ tf for tf in tfsd if tf["tf_label"] in subsampling]:
-
-        # duration for the entire scene
-        scene_dur = tf["end"] - tf["start"]
-
-        # check to see whether this scene meets the subsampling threshold for its label
-        if scene_dur > subsampling[tf["tf_label"]] :
-
-            # We want enough subsample scenes so that each is shorter than the 
-            # subsampling threshold.
-            # Example: 36s scene with 10s subsampling -> 4 x 9s subsample scenes
-            num_subsamples = ( scene_dur // subsampling[tf["tf_label"]] ) + 1        
-            subsample_dur = scene_dur // num_subsamples
-
-            subsamples = []           # subsample scenes to be collected for this scene
-            next_start = tf["start"]  # first subsample starts at start of the long scene
+    # iterate through scene rows of tfsd for each label subejct to subsampling
+    for tf in [ tf for tf in tfsd if tf["tf_label"] in subsampling ]:
+        # check for scenes with more than one representative
+        if len(tf["reps"]) > 1:
+            rep_order = sorted( [tp_id for tp_id in tf["reps"] ], 
+                                key = lambda i: tf["reps"][i]["time"] )
             
-            for _ in range(num_subsamples):
-                subsample_id = tf["tf_id"] + "_s_" + str(len(subsamples))
-                subsample_label = tf["tf_label"] + SUBSAMPLE_LABEL_SUFFIX
-                subsample_start = next_start
-                subsample_end = next_start + subsample_dur
-                subsample_rep = next_start + ( subsample_dur // 2 )
-                subsample_text = tf["text"]
+            # print("Dynamic scene!", len(tf["reps"]), rep_order)  # DIAG
 
-                subsample = {
-                    "tf_id": subsample_id,
-                    "tf_label": subsample_label,
-                    "start": subsample_start,
-                    "end": subsample_end, 
-                    "tp_time": subsample_rep,
-                    "tp_label": None,
-                    "tp_id": None,
-                    "td_anns": None,
-                    "text": subsample_text }
-                subsamples.append(subsample)
+            gap = subsampling[tf["tf_label"]]
 
-                next_start = subsample_end
-            
+            subsamples = []  # subsample scenes to be collected for this scene
+            last_rep_time = -1000000
+            for i, tp_id in enumerate(rep_order):
+                # We'll take the first sample and any subsample after that if skipping
+                # it would take us past the maximum gap, and also take the final one.
+                needful = False
+                if i == 0: # first rep
+                    needful = True
+                elif i == (len(rep_order) - 1):  # final rep
+                    needful = True
+                else:
+                    # Look ahead to the next rep
+                    next_rep_time = tf["reps"][rep_order[i+1]]["time"]
+                    if (next_rep_time - last_rep_time) > gap:
+                        needful = True
+
+                if needful:
+                    # check to see if there is a TD annotation with this rep
+                    td_ids = [ td_id for td_id in tf["td_anns"]
+                               if tp_id in tf["td_anns"][td_id]["origins_tp_ids"] ]
+                    if len(td_ids) == 0:
+                        td_id = None
+                    elif len(td_ids) == 1:
+                        td_id = td_ids[0]
+                    else:
+                        td_id = td_ids[0]
+                        logging.warning(f"Timepoint `{tp_id}` is rep for more than one TextDocument in TimeFrame `{tf['tf_id']}`")
+                    
+                    # if there is a TD annotation, get the info from it
+                    if td_id:
+                        subsample_td_anns = { td_id: tf["td_anns"][td_id] }
+                        subsample_text = tf["td_anns"][td_id]["text"]
+                    else:
+                        subsample_td_anns = None
+                        subsample_text = None
+
+                    subsample = {
+                        "tf_id":    tf["tf_id"] + "_r_" + str(i),
+                        "tf_label": tf["tf_label"] + EXTRA_REP_LABEL_SUFFIX,
+                        "start":    tf["reps"][tp_id]["time"],
+                        "end":      tf["reps"][tp_id]["time"], 
+                        "tp_time":  tf["reps"][tp_id]["time"],
+                        "tp_label": tf["reps"][tp_id]["tp_label"],
+                        "tp_id":    tp_id,
+                        "text":     subsample_text,
+                        "reps":     None,
+                        "td_anns":  subsample_td_anns,
+                        }
+                    subsamples.append(subsample)
+                    last_rep_time = tf["reps"][tp_id]["time"]
+
             # Done with this scene.  Add new samples to running list of new scenes
-            new_scenes += subsamples
+            new_scenes += subsamples  
+
+        # proceed to arithmetic subsampling 
+        else:
+            # duration for the entire scene
+            scene_dur = tf["end"] - tf["start"]
+
+            # check to see whether this scene meets the subsampling threshold for its label
+            if scene_dur > subsampling[tf["tf_label"]] :
+
+                # We want enough subsample scenes so that each is shorter than the 
+                # subsampling threshold.
+                # Example: 36s scene with 10s subsampling -> 4 x 9s subsample scenes
+                num_subsamples = ( scene_dur // subsampling[tf["tf_label"]] ) + 1        
+                subsample_dur = scene_dur // num_subsamples
+
+                subsamples = []           # subsample scenes to be collected for this scene
+                next_start = tf["start"]  # first subsample starts at start of the long scene
+                
+                for _ in range(num_subsamples):
+                    subsample = {
+                        "tf_id":    tf["tf_id"] + "_s_" + str(len(subsamples)) ,
+                        "tf_label": tf["tf_label"] + SUBSAMPLE_LABEL_SUFFIX , 
+                        "start":    next_start,
+                        "end":      next_start + subsample_dur , 
+                        "tp_time":  next_start + ( subsample_dur // 2 ) ,
+                        "tp_label": None,
+                        "tp_id":    None,
+                        "text":     tf["text"],
+                        "reps":     None,
+                        "td_anns":  tf["td_anns"],
+                        }
+                    subsamples.append(subsample)
+                    next_start = subsample["end"]
+                
+                # Done with this scene.  Add new samples to running list of new scenes
+                new_scenes += subsamples
 
     # Done iterating through labeled scenes.  Add the new scenes the main list.
     tfsd += new_scenes
@@ -777,7 +857,7 @@ def display_tfsd(tfsd:list):
     """
     This function simply prints a simple table of TimeFrame annotations from a tfsd table
     """
-    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","td_ids","text"]
+    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","text"]
 
     for tf in tfsd:
         line = ""

@@ -28,7 +28,7 @@ from titlecase import titlecase
 __version__ = version("visaid_builder")
 from . import lilhelp
 from . import catification_prompts as cp
-from .proc_swt import SUBSAMPLE_LABEL_SUFFIX
+from .proc_swt import SUBSAMPLE_LABEL_SUFFIX, EXTRA_REP_LABEL_SUFFIX
 
 try:
     import tomllib  # in standard library fo Python 3.11+
@@ -91,6 +91,7 @@ def catify_text( raw_text:str,
         scene_prompts = cp.scene_prompts
 
     prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
+    prompt_scene_label = prompt_scene_label.removesuffix(EXTRA_REP_LABEL_SUFFIX)
     new_text = None
     fallback = False
 
@@ -376,13 +377,15 @@ def create_cataid( video_path:str,
 
     subsamples_present = False
     for t in all_scene_types:
-        if t.find(" - - -") != -1:
+        if t.find(SUBSAMPLE_LABEL_SUFFIX) != -1 or t.find(EXTRA_REP_LABEL_SUFFIX) != -1:
             subsamples_present = True
             break
 
     # filter to get SWT bins and special scene types
     scene_types = [ t for t in all_scene_types if 
-                    t not in SPECIAL_SCENE_TYPES and t.find(" - - -") == -1 ]
+                    t not in SPECIAL_SCENE_TYPES and 
+                    t.find(SUBSAMPLE_LABEL_SUFFIX) == -1 and
+                    t.find(EXTRA_REP_LABEL_SUFFIX) == -1 ]
 
     sample_types = [ t for t in SPECIAL_SCENE_TYPES if 
                      t in all_scene_types ]
@@ -448,9 +451,12 @@ def create_cataid( video_path:str,
 
         # Set some values used for logic.
         # `scenetype` means the `tf_label` without the subsample suffix
-        if tf_label.find(" - - -") != -1:
+        if tf_label.find(SUBSAMPLE_LABEL_SUFFIX) != -1:
             item_div_class += " subsample"
-            scenetype = tf_label[:tf_label.find(" - - -")]
+            scenetype = tf_label[:tf_label.find(SUBSAMPLE_LABEL_SUFFIX)]
+        elif tf_label.find(EXTRA_REP_LABEL_SUFFIX) != -1:
+            item_div_class += " subsample"
+            scenetype = tf_label[:tf_label.find(EXTRA_REP_LABEL_SUFFIX)]
         elif tf_label.find("unlabeled sample") != -1:
             item_div_class += " unsample"
             scenetype = tf_label
