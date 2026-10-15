@@ -68,6 +68,7 @@ PROC_SWT_DEFAULTS = { "default_to_none": True,
                       "include_first_time": True,
                       "include_final_time": True }
 
+# These constants must match the JavaScript constants in the cataid embedded logic
 SUBSAMPLE_LABEL_SUFFIX = " - - -"
 EXTRA_REP_LABEL_SUFFIX = " - + -"
 
@@ -405,7 +406,9 @@ def merge_td_texts( texts:list ) -> str:
             deduped.append( td.strip() )
             last = td.strip()
 
-    merged = ("\n\n".join(deduped)).strip()
+    texts = deduped[:]
+
+    merged = ("\n\n".join(texts)).strip()
 
     return merged
 

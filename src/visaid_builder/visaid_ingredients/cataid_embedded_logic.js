@@ -1,3 +1,4 @@
+// These must match the Python constants defined in scene processing code
 const SUBSAMPLE_LABEL_SUFFIX = " - - -"
 const EXTRA_REP_LABEL_SUFFIX = " - + -"
 
