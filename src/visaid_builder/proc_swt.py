@@ -245,35 +245,39 @@ def tfsd_from_mmif( usemmif:Mmif,
     """
     Analyzes MMIF file from SWT, combining  TimeFrame and TimePoint annotations, 
     along with associated TextDocument annotations.  
-    It returns tabular data (as a list of dictionaries).
-
-    This function is like the original `tfs_from_mmif` function for SWT, except 
-    returning a list of dictionaries (and allowing additional fields).
-
+    
     Takes serialized MMIF as a string as input.
-    Returns a list of dictionaries representing the TimeFrame annotations
+
+    Returns a list of dictionaries representing the TimeFrame annotations -- 
+    quasi-tabular data (as a list of dictionaries, with some dictionaries
+    having other dictionaries as values).
 
     Columns of returned "tfsd" table:
       (0) "tf_id":    TimeFrame ID (from MMIF file) (string)
       (1) "tf_label": TimeFrame label (string)
       (2) "start":    start time in milliseconds (int)
       (3) "end":      end time in milliseconds (int)
-      (4) "tp_time":  representative still time in milliseconds (int)
-      (5) "tp_label": representative still point label (string)
-      (-) "tp_id":    TimePoint ID (from MMIF file) of representative time point
-      (-) "text":     text from the TextDocument
-      (-) "reps":     dictionary of TimePoint annoations that are the representatives
-                      for this TimeFrame
+      (4) "tp_time":  time of a representative still in milliseconds (int)
+      (5) "tp_label": TimePoint label for the same representative still (string)
+      (-) "tp_id":    TimePoint ID (from MMIF file) of the same representative
+      (-) "text":     text from the TextDocument alligned with this TF
+      (-) "reps":     dictionary of all TimePoint annoations that are the 
+                      representatives for this TimeFrame (keyed to the id of 
+                      the TP)
            (-) "time"
            (-) "tp_label"
-      (-) "td_anns":  dictionary of TextDocument annotations keyed to the
-                      annotation ID (from MMIF file)
+      (-) "td_anns":  dictionary of TextDocument annotations aligned to this 
+                      TimeFrame (keyed to the ID of the TD)
            (-) "text"
            (-) "tf_id"
            (-) "origins_tp_ids"
            (-) "first_time"
     
-    The "reps" and "td_anns" values are used only for subsampling and pulling the 
+    The "tp_time", "tp_label", and "tp_id" are for just one representative 
+    TimePoint for the relevant TimeFrame.  When there are several representatives,
+    one is chosen from near the middle of the sequence.
+
+    The "reps" and "td_anns" values are used for subsampling and pulling the 
     TD annotations from particular reps.
     """
 
@@ -285,7 +289,7 @@ def tfsd_from_mmif( usemmif:Mmif,
         logging.info("MMIF file contained no SWT TimeFrame annotations.")
         return tfsd
 
-    # Otherwise, get the relevant views
+    # Get the relevant views for each of the kinds of annotations we seek
     tp_view = usemmif.get_view_by_id(tp_view_id)
     tf_view = usemmif.get_view_by_id(tf_view_id)
     if td_view_id is not None:
@@ -294,24 +298,24 @@ def tfsd_from_mmif( usemmif:Mmif,
         logging.info("MMIF file contained no captioner TextDocument annotations.")
         td_view = None
 
-    # Collect TP anns
-    # (dictionary keyed by TP ann ID)
+    # Collect all of the TP anns
+    # (dictionary keyed by TP annotation ID)
     tps = {}
     for ann in tp_view.get_annotations(AnnotationTypes.TimePoint):
         tps[ann.get_property("id")] = {
             "time": ann.get_property("timePoint"),
             "tp_label": ann.get_property("label") }
 
-    # Collect TD anns
-    # (dictionary keyed by TD ann ID)
+    # Collect all of the TD anns
+    # (dictionary keyed by TD annotation ID)
     tds = {}
     if td_view is not None:
-        # First, get mapping of TD ann to its source TF ann
+        # First, get mapping of each TD ann to its source TF ann
         tas = {}
         for ann in td_view.get_annotations(AnnotationTypes.Alignment):
             tas[ann.get_property("target")] = ann.get_property("source") 
         
-        # Add TD anns to a dictionary
+        # Add all the TD anns to a dictionary
         for ann in td_view.get_annotations(DocumentTypes.TextDocument):
             # get the list of TP ann IDs from the origins property
             tpis = ann.get_property("origins")
@@ -327,14 +331,15 @@ def tfsd_from_mmif( usemmif:Mmif,
     for ann in tf_view.get_annotations(AnnotationTypes.TimeFrame):
         tf = {}
 
-        # Set basic values
+        # Assign the basic values for this TimeFrame
         tf["tf_id"] = ann.get_property("id")
         tf["tf_label"] = ann.get_property("label")
 
         # Filter `tds` down to just those aligned with this TF.
         tf_tds = { td:tds[td] for td in tds if tds[td]["tf_id"] == tf["tf_id"] }
 
-        # Iterate through target TPs to get start time and end time
+        # Iterate through target TPs to find the earlies and the latest;
+        # These will be the start and end times for the TF.
         t0 = 36000000 # 10 hours
         tn = -1
         for tp_id in ann.get_property("targets"):
@@ -345,15 +350,16 @@ def tfsd_from_mmif( usemmif:Mmif,
         tf["start"] = t0
         tf["end"] = tn
 
-        # Now we need to choose a represenative TP for this TF - the "tp_id"
+        # Now we need to choose a one represenative TP for this TF (the "tp_id")
+        # Begin by getting all the reps.       
         reps = sorted( ann.get_property("representatives"), 
                        key=lambda i:tps[i]["time"] )
-        # First check for an eligible one from an associated TD.
-        # (If there are any from the TD origins that is also a rep TP for this TF,
-        # then choose the first of those.)
-        td_origins_tp_ids = []
+        # First, check for an eligible one from an associated TD.
+        # (If there are any TPs from the TD origins that is also a rep TP for this TF,
+        # then choose from among those.)
         if len(tf_tds):
             # build a list of all the TD origin TP ids for this TF
+            td_origins_tp_ids = []
             for td in tf_tds:
                 td_origins_tp_ids += tf_tds[td]["origins_tp_ids"]
             eligibles = [i for i in reps if i in td_origins_tp_ids]
@@ -363,13 +369,14 @@ def tfsd_from_mmif( usemmif:Mmif,
         # choose one from the middle
         tf["tp_id"] = eligibles[ (len(eligibles)-1)//2 ]
 
-        # Now that we a rep, set the rep's time and label
+        # Now that we a rep, set the rep's time and label from the values in 
+        # full collection of TP anns
         tf["tp_time"] = tps[tf["tp_id"]]["time"]
         tf["tp_label"] = tps[tf["tp_id"]]["tp_label"]
 
-        # The text associated with the TF is concatenation of all the TDs.
+        # The text associated with the TF merges the text of all the TDs for
+        # that TF.  
         if tf_tds:
-            # want to order the TDs by the time of their first rep time point
             td_list = [ tf_tds[i] for i in tf_tds ]
             td_list.sort(key= lambda d:d["first_time"])
             td_text_list = [ t["text"] for t in td_list ]
@@ -378,10 +385,10 @@ def tfsd_from_mmif( usemmif:Mmif,
         else:
             tf["text"] = None
 
-        # Get the reps for this TF
+        # Collect all the TPs that are reps for this TF
         tf["reps"] = { tp:tps[tp] for tp in tps if tp in reps }
 
-        # Now we need to associate text documents data with the TF
+        # Now we need to associate all the TD anns with this TF
         tf["td_anns"] = tf_tds
 
         tfsd.append(tf)
@@ -396,7 +403,8 @@ def merge_td_texts( texts:list ) -> str:
     """
     Take a list of strings (typically multi-line screen OCRs).
     Marges them into a single longer string.
-    (Removes consecutive duplicates)
+
+    (Removes consecutive duplicate full texts.)
     """
     # remove consecutive duplicates
     deduped = []
@@ -451,34 +459,38 @@ def add_scene_subsamples( tfsd:list,
     for scenetype in invalid_subsamples:
         del subsampling[scenetype]
 
-    # collect new rows for the new samples
+    # We will collect a big list with each of the new samples as its own scene
     new_scenes = []
 
-    # iterate through scene rows of tfsd for each label subejct to subsampling
+    # Iterate through scene rows of tfsd for each label subejct to subsampling
     for tf in [ tf for tf in tfsd if tf["tf_label"] in subsampling ]:
-        # check for scenes with more than one representative
+
+        # Check for scenes with more than one representative
+        # (If there are multiple reps, as in a dynamic scenes, we'll stick to those.)
         if len(tf["reps"]) > 1:
             rep_order = sorted( [tp_id for tp_id in tf["reps"] ], 
                                 key = lambda i: tf["reps"][i]["time"] )
             
-            # print("Dynamic scene!", len(tf["reps"]), rep_order)  # DIAG
+            period = subsampling[tf["tf_label"]]
 
-            gap = subsampling[tf["tf_label"]]
-
-            subsamples = []  # subsample scenes to be collected for this scene
+            # Subsample scenes to be collected for this scene
+            subsamples = []  
             last_rep_time = -1000000
             for i, tp_id in enumerate(rep_order):
-                # We'll take the first sample and any subsample after that if skipping
-                # it would take us past the maximum gap, and also take the final one.
+                # We'll take the first sample and any subsample after that on the 
+                # condition that skipping it would take us past the maximum period, 
+                # and we'll also take the final one regardless.
                 needful = False
-                if i == 0: # first rep
+                if i == 0: 
+                    # first rep
                     needful = True
-                elif i == (len(rep_order) - 1):  # final rep
+                elif i == (len(rep_order) - 1): 
+                    # final rep
                     needful = True
                 else:
                     # Look ahead to the next rep
                     next_rep_time = tf["reps"][rep_order[i+1]]["time"]
-                    if (next_rep_time - last_rep_time) > gap:
+                    if (next_rep_time - last_rep_time) > period:
                         needful = True
 
                 if needful:
@@ -493,7 +505,7 @@ def add_scene_subsamples( tfsd:list,
                         td_id = td_ids[0]
                         logging.warning(f"Timepoint `{tp_id}` is rep for more than one TextDocument in TimeFrame `{tf['tf_id']}`")
                     
-                    # if there is a TD annotation, get the info from it
+                    # if there is a TD annotation, copy the info from it
                     if td_id:
                         subsample_td_anns = { td_id: tf["td_anns"][td_id] }
                         subsample_text = tf["td_anns"][td_id]["text"]
@@ -501,6 +513,9 @@ def add_scene_subsamples( tfsd:list,
                         subsample_td_anns = None
                         subsample_text = None
 
+                    # Compose a new full TF scene dictionary for the subample
+                    # We'll make it an instantaneous scene, with the same time for the
+                    # start, end, and representative.
                     subsample = {
                         "tf_id":    tf["tf_id"] + "_r_" + str(i),
                         "tf_label": tf["tf_label"] + EXTRA_REP_LABEL_SUFFIX,
@@ -516,10 +531,12 @@ def add_scene_subsamples( tfsd:list,
                     subsamples.append(subsample)
                     last_rep_time = tf["reps"][tp_id]["time"]
 
-            # Done with this scene.  Add new samples to running list of new scenes
+            # Done with this scene.  Add new samples to running list of new scenes.
             new_scenes += subsamples  
 
-        # proceed to arithmetic subsampling 
+        # If there was only a single representative, then proceed to arithmetic subsampling 
+        # as a fallback.
+        # (This was the only kind of subsampling prior to version 2.3.0.)
         else:
             # duration for the entire scene
             scene_dur = tf["end"] - tf["start"]
@@ -552,10 +569,10 @@ def add_scene_subsamples( tfsd:list,
                     subsamples.append(subsample)
                     next_start = subsample["end"]
                 
-                # Done with this scene.  Add new samples to running list of new scenes
+                # Done with this scene.  Add new samples to running list of new scenes.
                 new_scenes += subsamples
 
-    # Done iterating through labeled scenes.  Add the new scenes the main list.
+    # Done iterating through labeled scenes.  Add the all new scenes the main list.
     tfsd += new_scenes
 
     return tfsd
@@ -576,7 +593,7 @@ def add_gap_samples( tfsd:dict,
     """
     tfsd = copy.deepcopy(tfsd)
 
-    # Sort just in case it was not already sorted
+    # Sort in case it was not already sorted
     tfsd.sort(key=lambda f:f["start"])
 
     # Add frames for first and final timepoints. These will be removed later.
@@ -602,7 +619,7 @@ def add_gap_samples( tfsd:dict,
     #
     # As long as the duration is less than the maximum gap, then the choice of 
     # sample duration is somewhat arbitrary.  One option would be to make the 
-    # duration 0, but a non-zero duration is more like the rest of the scenes.
+    # duration 0, but a non-zero duration is more like the labeled scenes.
     sample_dur = max_gap // 2
 
     # collect samples to add to the main table of scenes
