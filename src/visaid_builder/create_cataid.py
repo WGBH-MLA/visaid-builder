@@ -125,7 +125,11 @@ def catify_text( raw_text:str,
         fallback = True
 
     if fallback:
-        new_text = titlecase( raw_text.lower() )
+        # Some minimal non-AI processing.  Originally, when we used SmolVLM2, we 
+        # normalized the case.  But that makes less sense with a model like Qwen3.5
+        # that preserves case well.
+        #new_text = titlecase( raw_text.lower() )
+        new_text = raw_text
 
     return new_text
 
