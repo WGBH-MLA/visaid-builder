@@ -82,6 +82,7 @@ def catify_text( raw_text:str,
         try:
             system_prompt = custom_prompts["system_prompt"]
             scene_prompts = custom_prompts["scene_prompts"]
+
         except KeyError as e:
             print("Problem with `custom_prompts` dictionary.")
             print(e)
@@ -173,6 +174,16 @@ def create_cataid( video_path:str,
             params[key] = cataid_params[key]
         else:
             params[key] = CATAID_DEFAULTS[key]
+
+    # Load up custom prompts (if present)
+    custom_prompts = None
+    if params["use_ai_helper"] and params["custom_prompt_file"]:
+        if not prompts_dir:
+            raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
+        else:
+            prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
+            with open(prompt_file_path, "rb") as tomlfile:
+                custom_prompts = tomllib.load(tomlfile)
 
     # Consruct output cataid filename
     if hfilename == "":
@@ -515,27 +526,17 @@ def create_cataid( video_path:str,
             html_img_ms = f"<span class='img-ms hidden'><br>{tp_time:08} {video_frame_time:08}</span>"
 
 
-        # extracted text
+        # massage extracted text
         if f["text"]:
             aid_text = f["text"].replace("\\n", "\n")
-
-            # See about restructuring text
-            custom_prompts = None
-            if params["use_ai_helper"] and params["custom_prompt_file"]:
-                if not prompts_dir:
-                    raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
-                else:
-                    prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
-                    with open(prompt_file_path, "rb") as tomlfile:
-                        custom_prompts = tomllib.load(tomlfile)
-
-            editor_text = catify_text( aid_text, 
-                                       f["tf_label"], 
-                                       (params["use_ai_helper"] and _GBH_AI_HELPER),
-                                       custom_prompts=custom_prompts )
         else:
             aid_text = ""
-            editor_text = ""
+
+        # create/generate etd text
+        editor_text = catify_text( aid_text, 
+                                   f["tf_label"], 
+                                   (params["use_ai_helper"] and _GBH_AI_HELPER),
+                                   custom_prompts=custom_prompts )
 
         #
         # Build main block ingredients for itemrow
