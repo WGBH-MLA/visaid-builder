@@ -224,7 +224,7 @@ def create_cataid( video_path:str,
 
     # Load up custom prompts (if present)
     custom_prompts = None
-    if params["use_ai_helper"] and params["custom_prompt_file"]:
+    if params["custom_prompt_file"]:
         if not prompts_dir:
             raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
         else:
