@@ -11,7 +11,7 @@ To variables are defined:
 
 """
 
-system_prompt = """
+_system_prompt = """
 You are sharp and analytical. 
 You provide a short, precise answer to each request. 
 Do not restate the question or use full sentences. 
@@ -94,7 +94,22 @@ Output the two or three data elements, one per line.  Make sure to include a bla
 
 ###########################################################################
 
-scene_prompts = {
-    "slate": _slate_general_01,
-    "chyron and person": _chyron_instr_02
+
+# Data structure for other modules to import
+DEFAULT_PROMPTS = {
+
+    "system_prompt": _system_prompt,
+    "system_prompts": {},
+
+    "scene_prompt": None,
+    "scene_prompts": {
+        "slate": _slate_general_01,
+        "chyron and person": _chyron_instr_02,
+    },
+
+    "default_text": None,
+    "default_texts": {},
+
+    "addition": None,
+    "additions": {},
 }

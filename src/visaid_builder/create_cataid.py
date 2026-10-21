@@ -27,7 +27,7 @@ from titlecase import titlecase
 
 __version__ = version("visaid_builder")
 from . import lilhelp
-from . import catification_prompts as cp
+from .catification_prompts import DEFAULT_PROMPTS
 from .proc_swt import SUBSAMPLE_LABEL_SUFFIX, EXTRA_REP_LABEL_SUFFIX
 
 try:
@@ -67,49 +67,88 @@ SPECIAL_SCENE_TYPES = [ "first frame checked",
 
 AI_CACHE = {}
 
+
 def catify_text( raw_text:str, 
                  tf_label:str, 
                  use_ai:bool = True, 
-                 custom_prompts = None 
+                 custom_prompts = {}, 
                  ) -> str:
     """
     Transform raw text as appropriate for cataloging.
+
+    Use AI and custom prompts, as appropriate.
     """
 
     global AI_CACHE
 
-    if custom_prompts:
-        try:
-            system_prompt = custom_prompts["system_prompt"]
-            scene_prompts = custom_prompts["scene_prompts"]
-
-        except KeyError as e:
-            print("Problem with `custom_prompts` dictionary.")
-            print(e)
-            raise
-    else:
-        system_prompt = cp.system_prompt
-        scene_prompts = cp.scene_prompts
-
     prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
     prompt_scene_label = prompt_scene_label.removesuffix(EXTRA_REP_LABEL_SUFFIX)
-    new_text = None
+
     fallback = False
+    new_text = None
 
-    if use_ai and prompt_scene_label in scene_prompts :
+    prompts = { "scene_prompt": None, 
+                "system_prompt": None, 
+                "addition": None, 
+                "default_text": None,
+               }
 
+    # Set prompts based on precedence
+    for ptype in prompts:
+        # 1. Custom scene-specific prompt from a collection
+        if prompts[ptype] is None and ptype+"s" in custom_prompts:
+            ptype_prompts = custom_prompts[ptype+"s"]
+            if prompt_scene_label in ptype_prompts:
+                if ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = ptype_prompts[prompt_scene_label]
+        # 2. Custom non-scene-specific prompt
+        if prompts[ptype] is None and ptype in custom_prompts: 
+            if custom_prompts[ptype]:
+                prompts[ptype] = custom_prompts[ptype]
+        # 3. Default (packaged) scene-specific prompt
+        if prompts[ptype] is None and ptype+"s" in DEFAULT_PROMPTS:                                
+            default_ptype_prompts = DEFAULT_PROMPTS[ptype+"s"]
+            if prompt_scene_label in default_ptype_prompts:
+                if default_ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = default_ptype_prompts[prompt_scene_label]
+        # 4. Default (packaged) non-scene-specifc prompt (unlikely)
+        if prompts[ptype] is None and ptype in DEFAULT_PROMPTS:
+            if DEFAULT_PROMPTS[ptype]:
+                prompts[ptype] = DEFAULT_PROMPTS[ptype]
+        # 5. Fallback
+        if prompts[ptype] is None:
+            prompts[ptype] = None                  
+
+
+    # first check for a default value for this scene
+    if prompts["default_text"]:
+        new_text = prompts["default_text"]
+
+    elif not raw_text.strip():
+        fallback = True
+
+    elif raw_text.strip().lower() == "none":
+        fallback = True
+
+    elif not use_ai:
+        fallback = True
+
+    elif not ( prompts["scene_prompt"] and prompts["system_prompt"] ):
+        fallback = True
+
+    else:
         # first check AI_CACHE for this prompt and response
         if (prompt_scene_label, raw_text) in AI_CACHE:
             new_text = AI_CACHE[(prompt_scene_label, raw_text)]
 
-        # call the AI helpers
+        # call the AI helper
         else:
             try:
-                new_text = ai.analyze_sample( scene_prompts[prompt_scene_label], 
-                                            raw_text,
-                                            system_prompt=system_prompt,
-                                            max_tokens=100,
-                                            deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
+                new_text = ai.analyze_sample( prompts["scene_prompt"], 
+                                              raw_text,
+                                              system_prompt=prompts["system_prompt"],
+                                              max_tokens=100,
+                                              deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
                 
                 # insert response into AI_CACHE
                 AI_CACHE[(prompt_scene_label, raw_text)] = new_text
@@ -120,17 +159,25 @@ def catify_text( raw_text:str,
                 print(e)
                 fallback = True
 
+        # check whether we got a result
         if not new_text:
             fallback = True
-    else:
-        fallback = True
 
     if fallback:
         # Some minimal non-AI processing.  Originally, when we used SmolVLM2, we 
         # normalized the case.  But that makes less sense with a model like Qwen3.5
         # that preserves case well.
         #new_text = titlecase( raw_text.lower() )
-        new_text = raw_text
+        new_text = raw_text.strip()
+
+
+    # Finally, if there is an addition, add it to whatever we have
+    if prompts["addition"]:
+        if new_text:
+            new_text += "\n\n" + prompts["addition"]
+        else:
+            new_text = prompts["addition"]
+
 
     return new_text
 
