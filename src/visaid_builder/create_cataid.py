@@ -96,13 +96,13 @@ def catify_text( raw_text:str,
     # Set prompts based on precedence
     for ptype in prompts:
         # 1. Custom scene-specific prompt from a collection
-        if prompts[ptype] is None and ptype+"s" in custom_prompts:
+        if prompts[ptype] is None and custom_prompts and ptype+"s" in custom_prompts:
             ptype_prompts = custom_prompts[ptype+"s"]
             if prompt_scene_label in ptype_prompts:
                 if ptype_prompts[prompt_scene_label]:
                     prompts[ptype] = ptype_prompts[prompt_scene_label]
         # 2. Custom non-scene-specific prompt
-        if prompts[ptype] is None and ptype in custom_prompts: 
+        if prompts[ptype] is None and custom_prompts and ptype in custom_prompts: 
             if custom_prompts[ptype]:
                 prompts[ptype] = custom_prompts[ptype]
         # 3. Default (packaged) scene-specific prompt
@@ -223,7 +223,6 @@ def create_cataid( video_path:str,
             params[key] = CATAID_DEFAULTS[key]
 
     # Load up custom prompts (if present)
-    custom_prompts = None
     if params["custom_prompt_file"]:
         if not prompts_dir:
             raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
@@ -231,6 +230,8 @@ def create_cataid( video_path:str,
             prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
             with open(prompt_file_path, "rb") as tomlfile:
                 custom_prompts = tomllib.load(tomlfile)
+    else:
+        custom_prompts = None
 
     # Consruct output cataid filename
     if hfilename == "":
