@@ -359,7 +359,7 @@ def _parse_key_lines ( lines:list ) -> dict:
     for l in lines:
         assert l[:1] == "*", "Key lines must begin with '*'"
 
-        k = l[1:l.find(":")].strip()
+        k = l[1:l.find(":")].strip().lower()   # keys are not case-sensitive
         v = l[l.find(":")+1:].strip()
 
         # validate key itself
