@@ -279,9 +279,6 @@ CATEARS = CHYRON_SEC_CATEARS | GENERAL_CATEARS
 
 KEYS = {
     "contrib":         parse_key_contrib,
-    "prod":            parse_key_generic,
-    "dir":             parse_key_generic,
-    "cam":             parse_key_generic,
     "air":             parse_key_generic,
     "rec":             parse_key_generic,
     "date":            parse_key_generic,
