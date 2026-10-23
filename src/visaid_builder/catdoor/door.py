@@ -22,7 +22,8 @@ from . import ams_ingests
 from . import parse_etd
 
 
-def tablify_catouts( paths:list ) -> list:
+def tablify_catouts( paths:list, 
+                     message_level:str = 'all' ) -> list:
     """
     Takes a list of filepaths to catout JSON files.
 
@@ -74,7 +75,9 @@ def tablify_catouts( paths:list ) -> list:
             new_rows = []
             for ei in catoutd["editor_items"]:
 
-                etd_recs = parse_etd.parse_etd( ei["etd_text"], catoutd["asset_id"] )
+                etd_recs = parse_etd.parse_etd( ei["etd_text"], 
+                                                catoutd["asset_id"],
+                                                message_level=message_level )
 
                 # it is possible to have multiple etd records for a single editor_item
                 for etd_rec in etd_recs:
@@ -113,14 +116,15 @@ def main():
         "html-key": "Show data values from key-value-style editor text",
         "html-con": "Show data as would be in an AMS contributor ingest",
         "html-atn": "Show just the frames that need attention",
-        "ams-con-basic": "Create CSV for AMS2 of barebones data values for contributors",
-        "ams-con-full":  "Create CSV for AMS2 of all supported data fields for contributors",
+        "csv-ams-con": "Create CSV for AMS2 of all supported data fields for contributors",
     }
+
+    message_levels = ['none', 'problems', 'alerts', 'all']
 
     cmd_description = 'Outputs information from a collection of cataid output (catout) files.\n\n'
     cmd_description += 'Valid output types:\n'
     for t in output_types:
-        cmd_description += f"  {t}{' '*(15-len(t))}: {output_types[t]}\n"
+        cmd_description += f"  {t}{' '*(13-len(t))}: {output_types[t]}\n"
 
     parser = argparse.ArgumentParser(
         prog='catdoor',
@@ -143,6 +147,13 @@ def main():
         type=str,
         default="none",
         help="Type of output" )
+    parser.add_argument(
+        "-m", "--message-level",
+        metavar="MSGLVL",
+        type=str,
+        default="all",
+        help="The messages in terminal output. Options: " + ", ".join(message_levels) )
+    
 
     args = parser.parse_args()
 
@@ -195,9 +206,15 @@ def main():
         print("Exiting.")
         return
 
+    if args.message_level not in message_levels:
+        print("Invalid message-level specified.")
+        print("Must be one of: " + ", ".join(message_levels) )
+        print("Exiting.")
+        return        
+
     # Call the primary catout processing function to create a quasi-tabular structure
     # (This is the time-consuming step.)
-    catout_table = tablify_catouts( catout_paths )
+    catout_table = tablify_catouts( catout_paths, message_level=args.message_level )
 
     # Choose the output type
     if args.type == "html-etd":
@@ -210,9 +227,7 @@ def main():
         out_str = html_tables.make_contrib_ingest_table(catout_table)
     elif args.type == "html-atn":
         out_str = html_tables.make_attention_table(catout_table)
-    elif args.type == "ams-con-basic":
-        out_str = ams_ingests.make_basic_contrib_ingest(catout_table)
-    elif args.type == "ams-con-full":        
+    elif args.type == "csv-ams-con":        
         out_str = ams_ingests.make_full_contrib_ingest(catout_table)
     elif args.type == "none":
         out_str = None

@@ -197,6 +197,26 @@ def parse_catear_generic( v:str ) -> dict:
     return d
 
 
+def parse_catear_generic_novalue( v:str ) -> dict:
+    """
+    For catears that should not be given with a value
+    """
+
+    problems = []
+    alerts = []
+
+    if v:
+        problems.append("Error: Value supplied for cat ear that takes no values.")
+
+    d = {
+        "raw_value": v,
+        "_problems": problems,
+        "_alerts": alerts,
+    }
+    return d
+
+
+
 def parse_catear_role( v:str ) -> dict:
     problems = []
     alerts = []    
@@ -243,8 +263,8 @@ def parse_catear_sens( v:str ) -> dict:
 ############################################################################
 
 CHYRON_SEC_CATEARS = {
-    "home":            parse_catear_generic,
-    "np":              parse_catear_generic,
+    "home":            parse_catear_generic_novalue,
+    "np":              parse_catear_generic_novalue,
     "role":            parse_catear_role,
     "omit-attributes": parse_catear_sens,
 }
