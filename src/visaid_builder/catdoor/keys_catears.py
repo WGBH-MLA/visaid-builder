@@ -197,6 +197,26 @@ def parse_catear_generic( v:str ) -> dict:
     return d
 
 
+def parse_catear_generic_novalue( v:str ) -> dict:
+    """
+    For catears that should not be given with a value
+    """
+
+    problems = []
+    alerts = []
+
+    if v:
+        problems.append("Error: Value supplied for cat ear that takes no values.")
+
+    d = {
+        "raw_value": v,
+        "_problems": problems,
+        "_alerts": alerts,
+    }
+    return d
+
+
+
 def parse_catear_role( v:str ) -> dict:
     problems = []
     alerts = []    
@@ -243,8 +263,8 @@ def parse_catear_sens( v:str ) -> dict:
 ############################################################################
 
 CHYRON_SEC_CATEARS = {
-    "home":            parse_catear_generic,
-    "np":              parse_catear_generic,
+    "home":            parse_catear_generic_novalue,
+    "np":              parse_catear_generic_novalue,
     "role":            parse_catear_role,
     "omit-attributes": parse_catear_sens,
 }
@@ -259,9 +279,6 @@ CATEARS = CHYRON_SEC_CATEARS | GENERAL_CATEARS
 
 KEYS = {
     "contrib":         parse_key_contrib,
-    "prod":            parse_key_generic,
-    "dir":             parse_key_generic,
-    "cam":             parse_key_generic,
     "air":             parse_key_generic,
     "rec":             parse_key_generic,
     "date":            parse_key_generic,
@@ -272,9 +289,11 @@ KEYS = {
     "series-title":    parse_key_generic,
     "ep-title":        parse_key_generic, 
     "ep-no":           parse_key_generic,
+    "seg-title":        parse_key_generic, 
     "title":           parse_key_generic,
     "prog-desc":       parse_key_generic,
     "ep-desc":         parse_key_generic, 
+    "seg-desc":         parse_key_generic,     
     "genre":           parse_key_genre,
     "topic":           parse_key_topic,
     "geo":             parse_key_generic,

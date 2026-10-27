@@ -37,6 +37,7 @@ The valid keys for `params_in` are as follows:
 
 import json
 import logging
+import copy
 from pprint import pprint 
 
 from mmif import Mmif
@@ -55,18 +56,21 @@ PROC_SWT_DEFAULTS = { "default_to_none": True,
                       "exclude": [],
                       "max_unsampled_gap": 60000,
                       "subsampling": { 
-                          "bars": 120100,
-                          "credits": 1900,
-                          "chyron": 15100,
-                          "person & chyron": 15100,
-                          "other text": 4900,
-                          "slate": 9900 },
-                      "default_subsampling": 30100,
-                      "include_first_time": False,
-                      "include_final_time": False }
+                          "bars": 30000,
+                          "slate": 5000,
+                          "chyron and person": 4000,
+                          "person with text": 15000,
+                          "filmed text": 15000,
+                          "other text": 6000,
+                          "credits": 2000,
+                          },
+                      "default_subsampling": 30000,
+                      "include_first_time": True,
+                      "include_final_time": True }
 
+# These constants must match the JavaScript constants in the cataid embedded logic
 SUBSAMPLE_LABEL_SUFFIX = " - - -"
-
+EXTRA_REP_LABEL_SUFFIX = " - + -"
 
 def get_swt_view_ids(usemmif:Mmif):
     """
@@ -241,24 +245,40 @@ def tfsd_from_mmif( usemmif:Mmif,
     """
     Analyzes MMIF file from SWT, combining  TimeFrame and TimePoint annotations, 
     along with associated TextDocument annotations.  
-    It returns tabular data (as a list of dictionaries).
-
-    This function is like the original `tfs_from_mmif` function for SWT, except 
-    returning a list of dictionaries (and allowing additional fields).
-
+    
     Takes serialized MMIF as a string as input.
-    Returns a list of dictionaries representing the TimeFrame annotations
+
+    Returns a list of dictionaries representing the TimeFrame annotations -- 
+    quasi-tabular data (as a list of dictionaries, with some dictionaries
+    having other dictionaries as values).
 
     Columns of returned "tfsd" table:
       (0) "tf_id":    TimeFrame ID (from MMIF file) (string)
       (1) "tf_label": TimeFrame label (string)
       (2) "start":    start time in milliseconds (int)
       (3) "end":      end time in milliseconds (int)
-      (4) "tp_time":  representative still time in milliseconds (int)
-      (5) "tp_label": representative still point label (string)
-      (-) "tp_id":    TimePoint ID (from MMIF file) of representative time point
-      (-) "td_id":    TextDocument ID (from MMIF file)
-      (-) "text":     text from the TextDocument
+      (4) "tp_time":  time of a representative still in milliseconds (int)
+      (5) "tp_label": TimePoint label for the same representative still (string)
+      (-) "tp_id":    TimePoint ID (from MMIF file) of the same representative
+      (-) "text":     text from the TextDocument alligned with this TF
+      (-) "reps":     dictionary of all TimePoint annoations that are the 
+                      representatives for this TimeFrame (keyed to the id of 
+                      the TP)
+           (-) "time"
+           (-) "tp_label"
+      (-) "td_anns":  dictionary of TextDocument annotations aligned to this 
+                      TimeFrame (keyed to the ID of the TD)
+           (-) "text"
+           (-) "tf_id"
+           (-) "origins_tp_ids"
+           (-) "first_time"
+    
+    The "tp_time", "tp_label", and "tp_id" are for just one representative 
+    TimePoint for the relevant TimeFrame.  When there are several representatives,
+    one is chosen from near the middle of the sequence.
+
+    The "reps" and "td_anns" values are used for subsampling and pulling the 
+    TD annotations from particular reps.
     """
 
     # Start with an empty list of TimeFrame annotations
@@ -269,7 +289,7 @@ def tfsd_from_mmif( usemmif:Mmif,
         logging.info("MMIF file contained no SWT TimeFrame annotations.")
         return tfsd
 
-    # Otherwise, get the relevant views
+    # Get the relevant views for each of the kinds of annotations we seek
     tp_view = usemmif.get_view_by_id(tp_view_id)
     tf_view = usemmif.get_view_by_id(tf_view_id)
     if td_view_id is not None:
@@ -278,113 +298,98 @@ def tfsd_from_mmif( usemmif:Mmif,
         logging.info("MMIF file contained no captioner TextDocument annotations.")
         td_view = None
 
-    # Collect TD annotations 
-    # (list of dictionaries of TDs)
-    tds = []
-    if td_view is not None:
-
-        ver = tuple( map(int, get_CLAMS_app_ver(usemmif, td_view_id)[1:].split('.') ) )
-        # print("**** verison: ", ver) #DIAG
-
-        if td_view.metadata.app.find("smolvlm2") > -1 and ver < (1, 0):
-            # smolvlm2-captioner pre-v1.0-beta-style
-            #print("**** LEGACY") # DIAG
-
-            # First, get mapping of TD ann to its source TP ann
-            tas = {}
-            for ann in td_view.get_annotations(AnnotationTypes.Alignment):
-                tas[ann.get_property("target")] = ann.get_property("source") 
-
-            # Build a list of TD anns along with source TP
-            for ann in td_view.get_annotations(DocumentTypes.TextDocument):
-                td = {}
-                td["td_id"] = ann.get_property("id")
-                td["tf_id"] = ann.get_property("origin")
-                td["tp_id"] = tas[td["td_id"]]
-                td["text"] = ann.get_property("text").value
-                tds.append(td)
-
-        else:
-            # New view structure May 2026
-            #print("**** MODERN") # DIAG
-
-            # First, get mapping of TD ann to its source TF ann
-            tas = {}
-            for ann in td_view.get_annotations(AnnotationTypes.Alignment):
-                tas[ann.get_property("target")] = ann.get_property("source") 
-            
-            # Build a list of TD anns along with source TF
-            for ann in td_view.get_annotations(DocumentTypes.TextDocument):
-                td = {}
-                td["td_id"] = ann.get_property("id")
-                td["text"] = ann.get_property("text").value
-
-                # get the TF ann ID from the alignment annotation dictionary
-                td["tf_id"] = tas[td["td_id"]]
-
-                # get the TP ann ID from the *first* item in the origins property
-                if len(ann.get_property("origins")):
-                    td["tp_id"] = ann.get_property("origins")[0]
-                else:
-                    td["tp_id"] = None
-
-                tds.append(td)
-
-
-    # Collect TP anns
-    # (dictionary keyed by TP ann ID)
+    # Collect all of the TP anns
+    # (dictionary keyed by TP annotation ID)
     tps = {}
     for ann in tp_view.get_annotations(AnnotationTypes.TimePoint):
         tps[ann.get_property("id")] = {
             "time": ann.get_property("timePoint"),
             "tp_label": ann.get_property("label") }
 
-    # Build up the list of TF anns
+    # Collect all of the TD anns
+    # (dictionary keyed by TD annotation ID)
+    tds = {}
+    if td_view is not None:
+        # First, get mapping of each TD ann to its source TF ann
+        tas = {}
+        for ann in td_view.get_annotations(AnnotationTypes.Alignment):
+            tas[ann.get_property("target")] = ann.get_property("source") 
+        
+        # Add all the TD anns to a dictionary
+        for ann in td_view.get_annotations(DocumentTypes.TextDocument):
+            # get the list of TP ann IDs from the origins property
+            tpis = ann.get_property("origins")
+            origins = sorted( tpis, key = lambda i:tps[i]["time"] )
+            tds[ann.get_property("id")] = {
+                "text": ann.get_property("text").value,
+                "tf_id": tas[ann.get_property("id")],
+                "origins_tp_ids": origins,
+                "first_time": tps[origins[0]]["time"] }
+
+    # Build up the list of TF annotations to make the `tfsd` list
     # (list of dictionaries of TFs)
     for ann in tf_view.get_annotations(AnnotationTypes.TimeFrame):
         tf = {}
+
+        # Assign the basic values for this TimeFrame
         tf["tf_id"] = ann.get_property("id")
         tf["tf_label"] = ann.get_property("label")
-        
-        # iterate through target TPs to get start time and end time
-        tf["start"] = 36000000 # 10 hours
-        tf["end"] = -1
+
+        # Filter `tds` down to just those aligned with this TF.
+        tf_tds = { td:tds[td] for td in tds if tds[td]["tf_id"] == tf["tf_id"] }
+
+        # Iterate through target TPs to find the earlies and the latest;
+        # These will be the start and end times for the TF.
+        t0 = 36000000 # 10 hours
+        tn = -1
         for tp_id in ann.get_property("targets"):
-            if tps[tp_id]["time"] < tf["start"]:
-                tf["start"] = tps[tp_id]["time"]
-            if tps[tp_id]["time"] > tf["end"]:
-                tf["end"] = tps[tp_id]["time"]
+            if tps[tp_id]["time"] < t0:
+                t0 = tps[tp_id]["time"]
+            if tps[tp_id]["time"] > tn:
+                tn = tps[tp_id]["time"]
+        tf["start"] = t0
+        tf["end"] = tn
 
-        # see if we have data from a TD
-        tftds = [ td for td in tds if td["tf_id"] == tf["tf_id"] ]
-        if not len(tftds):
-            tf["td_id"] = None
-            tf["text"] = None
+        # Now we need to choose a one represenative TP for this TF (the "tp_id")
+        # Begin by getting all the reps.       
+        reps = sorted( ann.get_property("representatives"), 
+                       key=lambda i:tps[i]["time"] )
+        # First, check for an eligible one from an associated TD.
+        # (If there are any TPs from the TD origins that is also a rep TP for this TF,
+        # then choose from among those.)
+        if len(tf_tds):
+            # build a list of all the TD origin TP ids for this TF
+            td_origins_tp_ids = []
+            for td in tf_tds:
+                td_origins_tp_ids += tf_tds[td]["origins_tp_ids"]
+            eligibles = [i for i in reps if i in td_origins_tp_ids]
         else:
-            if len(tftds) > 1:
-                logging.info(f'More than one TextDocument annotation for TimeFrame {tf["tf_id"]}')
-            td = tftds[0]
-            tf["td_id"] = td["td_id"]
-            tf["text"] = td["text"]
-            if td["tp_id"] in ann.get_property("representatives"):
-                # we have a rep chosen by the TextDocumemnt annotator; choose that as the TF rep
-                tf["tp_id"] = td["tp_id"]
+            # if there were not TDs for this TF, the eligibles are just the reps
+            eligibles = reps[:]
+        # choose one from the middle
+        tf["tp_id"] = eligibles[ (len(eligibles)-1)//2 ]
 
-        # if we didn't get a rep TP before, then we have to choose one
-        if "tp_id" not in tf:
-            reps = []
-            for tp_id in ann.get_property("representatives"):
-                rep = { "tp_id": tp_id, 
-                        "time": tps[tp_id]["time"] }
-                reps.append(rep)
-            reps.sort(key=lambda f:f["time"])
-
-            # choose one from the middle
-            tf["tp_id"] = reps[ (len(reps)-1)//2 ]["tp_id"] 
-
-        # Now that we definitely have a rep, set the rep's time and label
+        # Now that we a rep, set the rep's time and label from the values in 
+        # full collection of TP anns
         tf["tp_time"] = tps[tf["tp_id"]]["time"]
         tf["tp_label"] = tps[tf["tp_id"]]["tp_label"]
+
+        # The text associated with the TF merges the text of all the TDs for
+        # that TF.  
+        if tf_tds:
+            td_list = [ tf_tds[i] for i in tf_tds ]
+            td_list.sort(key= lambda d:d["first_time"])
+            td_text_list = [ t["text"] for t in td_list ]
+            tds_text = merge_td_texts(td_text_list)
+            tf["text"] = tds_text
+        else:
+            tf["text"] = None
+
+        # Collect all the TPs that are reps for this TF
+        tf["reps"] = { tp:tps[tp] for tp in tps if tp in reps }
+
+        # Now we need to associate all the TD anns with this TF
+        tf["td_anns"] = tf_tds
 
         tfsd.append(tf)
 
@@ -394,28 +399,314 @@ def tfsd_from_mmif( usemmif:Mmif,
 
 
 
-def adjust_tfsd( tfsd_in:list, 
+def merge_td_texts( texts:list ) -> str:
+    """
+    Take a list of strings (typically multi-line screen OCRs).
+    Marges them into a single longer string.
+
+    (Removes consecutive duplicate full texts.)
+    """
+    # remove consecutive duplicates
+    deduped = []
+    last = ""
+    for td in texts:
+        if td.strip() != last:
+            deduped.append( td.strip() )
+            last = td.strip()
+
+    texts = deduped[:]
+
+    merged = ("\n\n".join(texts)).strip()
+
+    return merged
+
+
+
+def add_scene_subsamples( tfsd:list,
+                          subsampling_params:dict,
+                          default_subsampling:int,
+                          ) -> dict:
+    """
+    Adds extra samples for longer scenes.
+
+    Uses extra representatives if they're there.  Otherwise performs
+    arithmetic subampling.
+    """
+    tfsd = copy.deepcopy(tfsd)
+
+    # First, collect the subsampling thresholds for each scene type
+    if default_subsampling is None:
+        # no default subsampling; just use subsampling specified in params dictionary
+        subsampling = copy.deepcopy(subsampling_params)
+    else:
+        # assign subsampling for all frame types
+        subsampling = {}
+        tf_labels = set( [ tf["tf_label"] for tf in tfsd ] )
+        for label in tf_labels:
+            # go ahead and set subsampling for all labels to the default value
+            subsampling[label] = default_subsampling
+        if subsampling_params:
+            # overwrite the default value for subsampling values specified in params dictionary
+            for label in subsampling_params:
+                subsampling[label] = subsampling_params[label]
+
+    # Check for and remove invalid subsampling threshold values
+    invalid_subsamples = []
+    for scenetype in subsampling:
+        if not ( subsampling[scenetype] > 0 and subsampling[scenetype] < 9000000 ):
+            logging.warning("Ignoring invalid scene sampling:", scenetype, ":", subsampling[scenetype])
+            invalid_subsamples.append(scenetype)
+    for scenetype in invalid_subsamples:
+        del subsampling[scenetype]
+
+    # We will collect a big list with each of the new samples as its own scene
+    new_scenes = []
+
+    # Iterate through scene rows of tfsd for each label subejct to subsampling
+    for tf in [ tf for tf in tfsd if tf["tf_label"] in subsampling ]:
+
+        # Check for scenes with more than one representative
+        # (If there are multiple reps, as in a dynamic scenes, we'll stick to those.)
+        if len(tf["reps"]) > 1:
+            rep_order = sorted( [tp_id for tp_id in tf["reps"] ], 
+                                key = lambda i: tf["reps"][i]["time"] )
+            
+            period = subsampling[tf["tf_label"]]
+
+            # Subsample scenes to be collected for this scene
+            subsamples = []  
+            last_rep_time = -1000000
+            for i, tp_id in enumerate(rep_order):
+                # We'll take the first sample and any subsample after that on the 
+                # condition that skipping it would take us past the maximum period, 
+                # and we'll also take the final one regardless.
+                needful = False
+                if i == 0: 
+                    # first rep
+                    needful = True
+                elif i == (len(rep_order) - 1): 
+                    # final rep
+                    needful = True
+                else:
+                    # Look ahead to the next rep
+                    next_rep_time = tf["reps"][rep_order[i+1]]["time"]
+                    if (next_rep_time - last_rep_time) > period:
+                        needful = True
+
+                if needful:
+                    # check to see if there is a TD annotation with this rep
+                    td_ids = [ td_id for td_id in tf["td_anns"]
+                               if tp_id in tf["td_anns"][td_id]["origins_tp_ids"] ]
+                    if len(td_ids) == 0:
+                        td_id = None
+                    elif len(td_ids) == 1:
+                        td_id = td_ids[0]
+                    else:
+                        td_id = td_ids[0]
+                        logging.warning(f"Timepoint `{tp_id}` is rep for more than one TextDocument in TimeFrame `{tf['tf_id']}`")
+                    
+                    # if there is a TD annotation, copy the info from it
+                    if td_id:
+                        subsample_td_anns = { td_id: tf["td_anns"][td_id] }
+                        subsample_text = tf["td_anns"][td_id]["text"]
+                    else:
+                        subsample_td_anns = None
+                        subsample_text = None
+
+                    # Compose a new full TF scene dictionary for the subample
+                    # We'll make it an instantaneous scene, with the same time for the
+                    # start, end, and representative.
+                    subsample = {
+                        "tf_id":    tf["tf_id"] + "_r_" + str(i),
+                        "tf_label": tf["tf_label"] + EXTRA_REP_LABEL_SUFFIX,
+                        "start":    tf["reps"][tp_id]["time"],
+                        "end":      tf["reps"][tp_id]["time"], 
+                        "tp_time":  tf["reps"][tp_id]["time"],
+                        "tp_label": tf["reps"][tp_id]["tp_label"],
+                        "tp_id":    tp_id,
+                        "text":     subsample_text,
+                        "reps":     None,
+                        "td_anns":  subsample_td_anns,
+                        }
+                    subsamples.append(subsample)
+                    last_rep_time = tf["reps"][tp_id]["time"]
+
+            # Done with this scene.  Add new samples to running list of new scenes.
+            new_scenes += subsamples  
+
+        # If there was only a single representative, then proceed to arithmetic subsampling 
+        # as a fallback.
+        # (This was the only kind of subsampling prior to version 2.3.0.)
+        else:
+            # duration for the entire scene
+            scene_dur = tf["end"] - tf["start"]
+
+            # check to see whether this scene meets the subsampling threshold for its label
+            if scene_dur > subsampling[tf["tf_label"]] :
+
+                # We want enough subsample scenes so that each is shorter than the 
+                # subsampling threshold.
+                # Example: 36s scene with 10s subsampling -> 4 x 9s subsample scenes
+                num_subsamples = ( scene_dur // subsampling[tf["tf_label"]] ) + 1        
+                subsample_dur = scene_dur // num_subsamples
+
+                subsamples = []           # subsample scenes to be collected for this scene
+                next_start = tf["start"]  # first subsample starts at start of the long scene
+                
+                for _ in range(num_subsamples):
+                    subsample = {
+                        "tf_id":    tf["tf_id"] + "_s_" + str(len(subsamples)) ,
+                        "tf_label": tf["tf_label"] + SUBSAMPLE_LABEL_SUFFIX , 
+                        "start":    next_start,
+                        "end":      next_start + subsample_dur , 
+                        "tp_time":  next_start + ( subsample_dur // 2 ) ,
+                        "tp_label": None,
+                        "tp_id":    None,
+                        "text":     tf["text"],
+                        "reps":     None,
+                        "td_anns":  tf["td_anns"],
+                        }
+                    subsamples.append(subsample)
+                    next_start = subsample["end"]
+                
+                # Done with this scene.  Add new samples to running list of new scenes.
+                new_scenes += subsamples
+
+    # Done iterating through labeled scenes.  Add the all new scenes the main list.
+    tfsd += new_scenes
+
+    return tfsd
+
+
+
+def add_gap_samples( tfsd:dict, 
+                     max_gap:int, 
+                     first_time:int,
+                     final_time:int,
+                     ) -> dict:
+    """
+    Algorithm for adding extra scenes to see into the gaps between labeled
+    scenes.
+
+    The `max_gap` value controls the largest gap between scenes that does
+    not trigger interspersal of new scenes.
+    """
+    tfsd = copy.deepcopy(tfsd)
+
+    # Sort in case it was not already sorted
+    tfsd.sort(key=lambda f:f["start"])
+
+    # Add frames for first and final timepoints. These will be removed later.
+    # (This is necessary to find gaps before the first scene annotation and after
+    # the last scene annotation.)
+    first = {
+      "tf_id": 'dummy1',
+      "start": first_time,
+      "end": first_time, 
+      "tp_time": first_time,
+    }
+    tfsd.insert(0, first)
+    final = {
+      "tf_id": 'dummy2',
+      "start": final_time,
+      "end": final_time, 
+      "tp_time": final_time,
+    }
+    tfsd.append(final)
+
+    # Samples scenes are primarily useful for their central frame, but they need 
+    # a duration to be represented in the tfsd data structure.
+    #
+    # As long as the duration is less than the maximum gap, then the choice of 
+    # sample duration is somewhat arbitrary.  One option would be to make the 
+    # duration 0, but a non-zero duration is more like the labeled scenes.
+    sample_dur = max_gap // 2
+
+    # collect samples to add to the main table of scenes
+    samples = []
+
+    # index for use in the scene's id and label
+    next_sample_num = 1
+
+    # Iterate through existing time frames to identify gaps in which to 
+    # insert samples.  Specifically, for each time frame, after the first,
+    # look back to see how much time since the last one.  If that gap is 
+    # bigger than the max_gap, then make one or more samples.
+    for rnum in range(1, len(tfsd)) :
+        
+        # calculate the distance between the start of the current frame
+        # and the end of the previous
+        full_gap = tfsd[rnum]["start"] - tfsd[rnum-1]["end"]
+
+        if full_gap > max_gap :
+
+            # Figure out how many samples to make
+            num_samples = full_gap // max_gap
+
+            # Calculate the size of the gaps within which we'll locate new samples
+            gap_size = full_gap // num_samples
+
+            # collect samples (we'll add them into tfsd later)
+            for sample_count in range(num_samples):
+
+                # gap starts from the end of the last main scene, then offset by the
+                # samples we've already made in this full gap
+                gap_start = tfsd[rnum-1]["end"] + ( sample_count * gap_size )
+
+                sample_id = "s_" + str(next_sample_num)                    
+                sample_label = "unlabeled sample"
+                sample_start = gap_start + (gap_size - sample_dur)//2
+                sample_end = sample_start + sample_dur
+                sample_rep = sample_start + sample_dur//2
+
+                sample = {
+                    "tf_id": sample_id,
+                    "tf_label": sample_label,
+                    "start": sample_start,
+                    "end": sample_end, 
+                    "tp_time": sample_rep,
+                    "tp_label": None,
+                    "tp_id": None,
+                    "td_anns": None,
+                    "text": None }
+                samples.append(sample)
+
+                next_sample_num += 1
+
+    # add all the samples collected to the tfsd list 
+    tfsd += samples
+
+    # remove dummy first and last frames    
+    tfsd = [ tf for tf in tfsd if tf["tf_id"] not in ['dummy1','dummy2'] ]
+
+    return tfsd
+
+
+
+def adjust_tfsd( tfsd:list, 
                  first_time:int,
                  final_time:int,
-                 params_in:dict ):
+                 params_in:dict 
+                 ) -> dict:
     """
     Adds and/or removes rows to the array returned by `tfsd_from_mmif()`.  
 
-    The data structure for the table output is the same as in the input `tfsd` table.
+    The data structure for the table output is the same as in the input 
+    `tfsd` table.
 
-    Ajdustments are made on the basis of the parameter values passed in.
+    Adjustments are made on the basis of the parameter values passed in.
 
     Primary functionality is to
       - include only certain scene types
       - exclude certain scene types
+      - sub-sample long scenes
+      - sample gaps between labeled scenes
       - add a scene for the first frame checked
       - add a scene for the last frame checked
-      - sample gaps between labeled scenes
-      - sub-sample long scenes
     """
 
-    # Make a (shallow) copy of the input list, so not to alter it
-    tfsd = tfsd_in[:]
+    # Make a copy of the input list, so not to alter it
+    tfsd = copy.deepcopy(tfsd)
 
     # Check for the the values we need
     if first_time is None or final_time is None:
@@ -455,208 +746,51 @@ def adjust_tfsd( tfsd_in:list,
     # Go ahead and filter out scene types, according to parameters
     if params["include_only"] is not None:
         tfsd = [ tf for tf in tfsd if tf["tf_label"] in params["include_only"] ]
-    
     if params["exclude"] is not None and len(params["exclude"]) > 0:
         tfsd = [ tf for tf in tfsd if tf["tf_label"] not in params["exclude"] ]
-    
-    # Sort just in case it was not already sorted
-    tfsd.sort(key=lambda f:f["start"])
 
-    # Add frames for first and final timepoints.
-    # These may be removed later, but we add them for now.
-    # (The main reason for this is that we want to be able to find gaps where
-    # there are no scene annotations, including the beginning and end of the video.
-    # Logically, scene gaps must be between seens.  So we need beginning and ending
-    # scenes in order to catch the gaps.)
-    first = {
-      "tf_id": 'f_0',
-      "tf_label": 'first frame checked',
-      "start": first_time,
-      "end": first_time, 
-      "tp_time": first_time,
-      "tp_label": None,
-      "tp_id": None,
-      "td_id": None,
-      "text": None }
-    tfsd.insert(0, first)
-
-    final = {
-      "tf_id": 'f_n',
-      "tf_label": 'last frame checked',
-      "start": final_time,
-      "end": final_time, 
-      "tp_time": final_time,
-      "tp_label": None,
-      "tp_id": None,
-      "td_id": None,
-      "text": None }
-    tfsd.append(final)
-
-    #
-    # Gap sampling
-    # 
-    # If this parameter has been passed in with a non-zero value to the function, 
-    # then intersperse sampled of non-labeled scenes among labeled scenes.
-    #
-    # The "max_unsampled_gap" value controls the largest gap between scenes that does
-    # not trigger the addtition of interspersed samples.
-    # 
-    if params["max_unsampled_gap"]: 
-        max_gap = params["max_unsampled_gap"]
-
-        # Samples scenes are primarily useful for their central frame, but they need a 
-        # duration to be represented in the tfsd data structure.
-        #
-        # As long as the duration is less than the maximum gap, then the choice of sample
-        # duration is somewhat arbitrary.
-        sample_dur = max_gap // 2
-
-        # collect samples to add to the main table of scenes
-        samples = []
-
-        # index for use in the scene's id and label
-        next_sample_num = 1
-
-        # Iterate through existing time frames to identify gaps in which to 
-        # insert samples.  Specifically, for each time frame, after the first,
-        # look back to see how much time since the last one.  If that gap is 
-        # bigger than the max_gap, then make one or more samples.
-        for rnum in range(1, len(tfsd)) :
-            
-            # calculate the distance between the start of the current frame
-            # and the end of the previous
-            full_gap = tfsd[rnum]["start"] - tfsd[rnum-1]["end"]
-
-            if full_gap > max_gap :
-
-                # Figure out how many samples to make
-                num_samples = full_gap // max_gap
-
-                # Calculate the size of the gaps within which we'll locate new samples
-                gap_size = full_gap // num_samples
-
-                # collect samples (we'll add them into tfsd later)
-                for sample_count in range(num_samples):
-
-                    # gap starts from the end of the last main scene, then offset by the
-                    # samples we've already made in this full gap
-                    gap_start = tfsd[rnum-1]["end"] + ( sample_count * gap_size )
-
-                    sample_id = "s_" + str(next_sample_num)                    
-                    sample_label = "unlabeled sample"
-                    sample_start = gap_start + (gap_size - sample_dur)//2
-                    sample_end = sample_start + sample_dur
-                    sample_rep = sample_start + sample_dur//2
-
-                    sample = {
-                        "tf_id": sample_id,
-                        "tf_label": sample_label,
-                        "start": sample_start,
-                        "end": sample_end, 
-                        "tp_time": sample_rep,
-                        "tp_label": None,
-                        "tp_id": None,
-                        "td_id": None,
-                        "text": None }
-                    samples.append(sample)
-
-                    next_sample_num += 1
-
-        # add all the samples collected to the tfsd list 
-        tfsd += samples
-
-    # 
-    # Scene subsampling
-    # (Add extra samples scenes for longer scenes (especially, e.g., credits sequences) )
-    #
+    # Scene subsampling: Add extra samples scenes for longer scenes
+    # (We do this before the gap sampling so that that scenes created from the gap
+    #  sampling cannot be given subsamples.)
     if params["subsampling"] is not None or params["default_subsampling"] is not None:
+        tfsd = add_scene_subsamples( tfsd, params["subsampling"], params["default_subsampling"] )
 
-        # First, collect the subsampling thresholds for each scene type
-        subsampling = {}
-        if params["default_subsampling"] is None:
-            # no default subsampling; just use subsampling specified in params dictionary
-            subsampling = params["subsampling"]
-        else:
-            # assign subsampling for all frame types
-            bin_labels = set( [ tf["tf_label"] for tf in tfsd_in ] )
-            for label in bin_labels:
-                # go ahead and set subsampling for all labels to the default value
-                subsampling[label] = params["default_subsampling"]
-            if params["subsampling"]:
-                # overwrite the default value for subsampling values specified in params dictionary
-                for label in params["subsampling"]:
-                    subsampling[label] = params["subsampling"][label]
+    # Gap sampling:  If this parameter has been passed in with a non-zero value, 
+    # then intersperse sample non-labeled scenes among labeled scenes.
+    if params["max_unsampled_gap"]:
+        tfsd = add_gap_samples( tfsd, params["max_unsampled_gap"], first_time, final_time )
 
-        # Check for and remove invalid subsampling threshold values
-        invalid_subsamples = []
-        for scenetype in subsampling:
-            if not ( subsampling[scenetype] > 0 and subsampling[scenetype] < 9000000 ):
-                logging.warning("Ignoring invalid scene sampling:", scenetype, ":", subsampling[scenetype])
-                invalid_subsamples.append(scenetype)
-        for scenetype in invalid_subsamples:
-            del subsampling[scenetype]
-
-        # collect new rows for the new samples
-        new_scenes = []
-
-        # iterate through scene rows of tfsd for which the label is subejct to subsampling
-        for tf in [ tf for tf in tfsd if tf["tf_label"] in subsampling]:
-
-            # duration for the entire scene
-            scene_dur = tf["end"] - tf["start"]
-
-            # check to see whether this scene meets the subsampling threshold for its label
-            if scene_dur > subsampling[tf["tf_label"]] :
-
-                # We want enough subsample scenes so that each is shorter than the 
-                # subsampling threshold.
-                # Example: 36s scene with 10s subsampling -> 4 x 9s subsample scenes
-                num_subsamples = ( scene_dur // subsampling[tf["tf_label"]] ) + 1        
-                subsample_dur = scene_dur // num_subsamples
-
-                subsamples = []           # subsample scenes to be collected for this scene
-                next_start = tf["start"]  # first subsample starts at start of the long scene
-                
-                for _ in range(num_subsamples):
-                    subsample_id = tf["tf_id"] + "_s_" + str(len(subsamples))
-                    subsample_label = tf["tf_label"] + SUBSAMPLE_LABEL_SUFFIX
-                    subsample_start = next_start
-                    subsample_end = next_start + subsample_dur
-                    subsample_rep = next_start + ( subsample_dur // 2 )
-                    subsample_text = tf["text"]
-
-                    subsample = {
-                        "tf_id": subsample_id,
-                        "tf_label": subsample_label,
-                        "start": subsample_start,
-                        "end": subsample_end, 
-                        "tp_time": subsample_rep,
-                        "tp_label": None,
-                        "tp_id": None,
-                        "td_id": None,
-                        "text": subsample_text }
-                    subsamples.append(subsample)
-
-                    next_start = subsample_end
-                
-                # Done with this scene.  Add new samples to running list of new scenes
-                new_scenes += subsamples
-
-        # Done iterating through labeled scenes.  Add the new scenes the main list.
-        tfsd += new_scenes
-
+    # Add first and final scenes, if appropriate
+    if params["include_first_time"]:
+        first = {
+            "tf_id": 'f_0',
+            "tf_label": 'first frame checked',
+            "start": first_time,
+            "end": first_time, 
+            "tp_time": first_time,
+            "tp_label": None,
+            "tp_id": None,
+            "td_anns": None,
+            "text": None, 
+            }
+        tfsd.insert(0, first)
+    if params["include_final_time"]:
+        final = {
+            "tf_id": 'f_n',
+            "tf_label": 'last frame checked',
+            "start": final_time,
+            "end": final_time, 
+            "tp_time": final_time,
+            "tp_label": None,
+            "tp_id": None,
+            "td_anns": None,
+            "text": None,
+            }
+        tfsd.append(final)        
         
-    # If appropriate, remove first frame and final scenes (which were inserted above)
-    to_remove = []
-    if not params["include_first_time"]:
-        to_remove.append('f_0')
-    if not params["include_final_time"]:
-        to_remove.append('f_n')
-    if len(to_remove) > 0:
-        tfsd = [ tf for tf in tfsd if tf["tf_id"] not in to_remove ]
-
     tfsd.sort(key=lambda f:f["start"])
     return tfsd
+
 
 
 def tfsd_to_tfs(tfsd:list):
@@ -684,6 +818,7 @@ def tfsd_to_tfs(tfsd:list):
         tfs.append(tf)
 
     return tfs
+
 
 
 def find_overlaps( tfsd: list) -> list:
@@ -737,11 +872,12 @@ def display_tfs(tfs:list):
     pprint(tfs_pretty)
 
 
+
 def display_tfsd(tfsd:list):
     """
     This function simply prints a simple table of TimeFrame annotations from a tfsd table
     """
-    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","td_id","text"]
+    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","text"]
 
     for tf in tfsd:
         line = ""

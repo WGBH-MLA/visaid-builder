@@ -21,7 +21,9 @@ __all__ = ['parse_etd']
 from .keys_catears import KEYS, CATEARS, CHYRON_SEC_CATEARS, GENERAL_CATEARS
 
 
-def parse_etd( etd_text:str, asset_id:str = None ) -> list:
+def parse_etd( etd_text:str, 
+               asset_id:str = None,
+               message_level:str = 'all' ) -> list:
     """
     Top-level parsing logic of human edited/entered values.
     Takes a string of raw editor text as input.
@@ -89,7 +91,7 @@ def parse_etd( etd_text:str, asset_id:str = None ) -> list:
             # none of the above -> other etd value
             r = _parse_sec_other(sec, asset_id)
 
-        _out_message(r, asset_id, sec)
+        _out_message(r, asset_id, sec, message_level=message_level)
 
         etd_recs.append(r)
 
@@ -100,19 +102,33 @@ def parse_etd( etd_text:str, asset_id:str = None ) -> list:
 # Diagnostic output function
 ############################################################################
 
-def _out_message( r, asset_id, sec ) -> None:
+def _out_message( r:dict, 
+                  asset_id:str, 
+                  sec:str,
+                  message_level:str = 'all' ) -> None:
     """
     Output diagnostic message or alert to the terminal.
     """
 
-    if r["problems"] or r["alerts"]:
+    pmsg = amsg = False
+
+    if message_level == 'all':
+        pmsg = amsg = True
+    elif message_level == 'problems':
+        pmsg = True
+    elif message_level == 'alerts':
+        amsg = True
+
+    if (pmsg and r["problems"]) or (amsg and r["alerts"]):
 
         print(f"\nItem `{asset_id}`")
 
         for p in r["problems"]:
-            print(p)
+            if pmsg:
+                print(p)
         for a in r["alerts"]:
-            print(a)
+            if amsg:
+                print(a)
 
         print("   ```")
         for line in sec.splitlines():
@@ -359,7 +375,7 @@ def _parse_key_lines ( lines:list ) -> dict:
     for l in lines:
         assert l[:1] == "*", "Key lines must begin with '*'"
 
-        k = l[1:l.find(":")].strip()
+        k = l[1:l.find(":")].strip().lower()   # keys are not case-sensitive
         v = l[l.find(":")+1:].strip()
 
         # validate key itself

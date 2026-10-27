@@ -27,8 +27,8 @@ from titlecase import titlecase
 
 __version__ = version("visaid_builder")
 from . import lilhelp
-from . import catification_prompts as cp
-from .proc_swt import SUBSAMPLE_LABEL_SUFFIX
+from .catification_prompts import DEFAULT_PROMPTS
+from .proc_swt import SUBSAMPLE_LABEL_SUFFIX, EXTRA_REP_LABEL_SUFFIX
 
 try:
     import tomllib  # in standard library fo Python 3.11+
@@ -67,47 +67,88 @@ SPECIAL_SCENE_TYPES = [ "first frame checked",
 
 AI_CACHE = {}
 
+
 def catify_text( raw_text:str, 
                  tf_label:str, 
                  use_ai:bool = True, 
-                 custom_prompts = None 
+                 custom_prompts = {}, 
                  ) -> str:
     """
     Transform raw text as appropriate for cataloging.
+
+    Use AI and custom prompts, as appropriate.
     """
 
     global AI_CACHE
 
-    if custom_prompts:
-        try:
-            system_prompt = custom_prompts["system_prompt"]
-            scene_prompts = custom_prompts["scene_prompts"]
-        except KeyError as e:
-            print("Problem with `custom_prompts` dictionary.")
-            print(e)
-            raise
-    else:
-        system_prompt = cp.system_prompt
-        scene_prompts = cp.scene_prompts
-
     prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
-    new_text = None
+    prompt_scene_label = prompt_scene_label.removesuffix(EXTRA_REP_LABEL_SUFFIX)
+
     fallback = False
+    new_text = None
 
-    if use_ai and prompt_scene_label in scene_prompts :
+    prompts = { "scene_prompt": None, 
+                "system_prompt": None, 
+                "addition": None, 
+                "default_text": None,
+               }
 
+    # Set prompts based on precedence
+    for ptype in prompts:
+        # 1. Custom scene-specific prompt from a collection
+        if prompts[ptype] is None and custom_prompts and ptype+"s" in custom_prompts:
+            ptype_prompts = custom_prompts[ptype+"s"]
+            if prompt_scene_label in ptype_prompts:
+                if ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = ptype_prompts[prompt_scene_label]
+        # 2. Custom non-scene-specific prompt
+        if prompts[ptype] is None and custom_prompts and ptype in custom_prompts: 
+            if custom_prompts[ptype]:
+                prompts[ptype] = custom_prompts[ptype]
+        # 3. Default (packaged) scene-specific prompt
+        if prompts[ptype] is None and ptype+"s" in DEFAULT_PROMPTS:                                
+            default_ptype_prompts = DEFAULT_PROMPTS[ptype+"s"]
+            if prompt_scene_label in default_ptype_prompts:
+                if default_ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = default_ptype_prompts[prompt_scene_label]
+        # 4. Default (packaged) non-scene-specifc prompt (unlikely)
+        if prompts[ptype] is None and ptype in DEFAULT_PROMPTS:
+            if DEFAULT_PROMPTS[ptype]:
+                prompts[ptype] = DEFAULT_PROMPTS[ptype]
+        # 5. Fallback
+        if prompts[ptype] is None:
+            prompts[ptype] = None                  
+
+
+    # first check for a default value for this scene
+    if prompts["default_text"]:
+        new_text = prompts["default_text"]
+
+    elif not raw_text.strip():
+        fallback = True
+
+    elif raw_text.strip().lower() == "none":
+        fallback = True
+
+    elif not use_ai:
+        fallback = True
+
+    elif not ( prompts["scene_prompt"] and prompts["system_prompt"] ):
+        fallback = True
+
+    else:
         # first check AI_CACHE for this prompt and response
         if (prompt_scene_label, raw_text) in AI_CACHE:
             new_text = AI_CACHE[(prompt_scene_label, raw_text)]
 
-        # call the AI helpers
+        # call the AI helper
         else:
             try:
-                new_text = ai.analyze_sample( scene_prompts[prompt_scene_label], 
-                                            raw_text,
-                                            system_prompt=system_prompt,
-                                            max_tokens=100,
-                                            deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
+                new_text = ai.analyze_sample( prompts["scene_prompt"], 
+                                              raw_text,
+                                              system_prompt=prompts["system_prompt"],
+                                              max_tokens=100,
+                                              deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
                 
                 # insert response into AI_CACHE
                 AI_CACHE[(prompt_scene_label, raw_text)] = new_text
@@ -118,13 +159,25 @@ def catify_text( raw_text:str,
                 print(e)
                 fallback = True
 
+        # check whether we got a result
         if not new_text:
             fallback = True
-    else:
-        fallback = True
 
     if fallback:
-        new_text = titlecase( raw_text.lower() )
+        # Some minimal non-AI processing.  Originally, when we used SmolVLM2, we 
+        # normalized the case.  But that makes less sense with a model like Qwen3.5
+        # that preserves case well.
+        #new_text = titlecase( raw_text.lower() )
+        new_text = raw_text.strip()
+
+
+    # Finally, if there is an addition, add it to whatever we have
+    if prompts["addition"]:
+        if new_text:
+            new_text += "\n\n" + prompts["addition"]
+        else:
+            new_text = prompts["addition"]
+
 
     return new_text
 
@@ -168,6 +221,17 @@ def create_cataid( video_path:str,
             params[key] = cataid_params[key]
         else:
             params[key] = CATAID_DEFAULTS[key]
+
+    # Load up custom prompts (if present)
+    if params["custom_prompt_file"]:
+        if not prompts_dir:
+            raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
+        else:
+            prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
+            with open(prompt_file_path, "rb") as tomlfile:
+                custom_prompts = tomllib.load(tomlfile)
+    else:
+        custom_prompts = None
 
     # Consruct output cataid filename
     if hfilename == "":
@@ -376,13 +440,15 @@ def create_cataid( video_path:str,
 
     subsamples_present = False
     for t in all_scene_types:
-        if t.find(" - - -") != -1:
+        if t.find(SUBSAMPLE_LABEL_SUFFIX) != -1 or t.find(EXTRA_REP_LABEL_SUFFIX) != -1:
             subsamples_present = True
             break
 
     # filter to get SWT bins and special scene types
     scene_types = [ t for t in all_scene_types if 
-                    t not in SPECIAL_SCENE_TYPES and t.find(" - - -") == -1 ]
+                    t not in SPECIAL_SCENE_TYPES and 
+                    t.find(SUBSAMPLE_LABEL_SUFFIX) == -1 and
+                    t.find(EXTRA_REP_LABEL_SUFFIX) == -1 ]
 
     sample_types = [ t for t in SPECIAL_SCENE_TYPES if 
                      t in all_scene_types ]
@@ -448,9 +514,12 @@ def create_cataid( video_path:str,
 
         # Set some values used for logic.
         # `scenetype` means the `tf_label` without the subsample suffix
-        if tf_label.find(" - - -") != -1:
+        if tf_label.find(SUBSAMPLE_LABEL_SUFFIX) != -1:
             item_div_class += " subsample"
-            scenetype = tf_label[:tf_label.find(" - - -")]
+            scenetype = tf_label[:tf_label.find(SUBSAMPLE_LABEL_SUFFIX)]
+        elif tf_label.find(EXTRA_REP_LABEL_SUFFIX) != -1:
+            item_div_class += " subsample"
+            scenetype = tf_label[:tf_label.find(EXTRA_REP_LABEL_SUFFIX)]
         elif tf_label.find("unlabeled sample") != -1:
             item_div_class += " unsample"
             scenetype = tf_label
@@ -505,27 +574,17 @@ def create_cataid( video_path:str,
             html_img_ms = f"<span class='img-ms hidden'><br>{tp_time:08} {video_frame_time:08}</span>"
 
 
-        # extracted text
+        # massage extracted text
         if f["text"]:
             aid_text = f["text"].replace("\\n", "\n")
-
-            # See about restructuring text
-            custom_prompts = None
-            if params["use_ai_helper"] and params["custom_prompt_file"]:
-                if not prompts_dir:
-                    raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
-                else:
-                    prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
-                    with open(prompt_file_path, "rb") as tomlfile:
-                        custom_prompts = tomllib.load(tomlfile)
-
-            editor_text = catify_text( aid_text, 
-                                       f["tf_label"], 
-                                       (params["use_ai_helper"] and _GBH_AI_HELPER),
-                                       custom_prompts=custom_prompts )
         else:
             aid_text = ""
-            editor_text = ""
+
+        # create/generate etd text
+        editor_text = catify_text( aid_text, 
+                                   f["tf_label"], 
+                                   (params["use_ai_helper"] and _GBH_AI_HELPER),
+                                   custom_prompts=custom_prompts )
 
         #
         # Build main block ingredients for itemrow

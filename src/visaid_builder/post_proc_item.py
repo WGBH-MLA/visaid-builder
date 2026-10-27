@@ -28,6 +28,7 @@ start time after this point.)
 import csv
 import json
 import datetime
+import copy
 # import traceback
 
 from statistics import mean, median
@@ -226,8 +227,8 @@ def run_post( item:dict,
                                          proc_swt_params )        
         print(ins + f"  * Scene list length adjustment: {len(tfsd)} -> {len(tfsd_adj)}")
     else:
-        # a shallow copy is enough; tf records won't be edited after this
-        tfsd_adj = tfsd[:]
+        # adjusted TimeFrame table is same as unadjusted version
+        tfsd_adj = copy.deepcopy(tfsd)
 
 
     # create legacy tfs tables from tfsd tables
