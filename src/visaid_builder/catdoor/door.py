@@ -238,7 +238,7 @@ def main():
         out_str = ams_ingests.make_full_contrib_ingest(catout_table)
     elif args.type == "herd-cats":
         herd_cats(catout_table, args.image_directory, args.output)
-        return
+        out_str = None
     elif args.type == "none":
         out_str = None
     else:
