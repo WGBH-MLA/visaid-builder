@@ -1,104 +1,136 @@
 # I need a persistent variable for a bunch of functions, and a class is kinda designed for that
+START_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <title>cat door</title>
+  </head>
+  <style>
+    body {
+      padding: 20px;
+      font-family: sans-serif;
+    }
+    table {
+      background-color: #e8e8e8;
+    }
+    td {
+      border: 1px solid black;
+    }
+    th {
+      border: 1px solid black;
+    }
+    .small {
+      font-size: 0.7em;
+    }
+    .scroll-panel {
+      width: 300px;
+      height: 150px;
+      overflow: auto; /* Adds scrollbars only when content exceeds the box dimensions */
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+    .parent-container {
+      display: flex; /* Aligns children horizontally */
+      gap: 20px; /* Adds space between the two divs */
+    }
+    div.fdata {
+      width: 400px;
+    }
+    pre {
+      white-space: pre-wrap;
+      width: 300px;
+    }
+    img {
+      height: 180px;
+    }
+    #catdoor {
+      max-width: 1200px;
+      margin: 0 auto;
+      content-visibility: auto;
+    }
+  </style>
+  <body>
+  <form id="searchForm" class="parent-container">
 
-HTML_EXT_SCRIPTS = """
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.datatables.net/2.0.0/js/dataTables.js"></script>
-
-<script src="https://cdn.datatables.net/searchpanes/2.3.0/js/dataTables.searchPanes.js"></script>
-<script src="https://cdn.datatables.net/searchpanes/2.3.0/js/searchPanes.dataTables.js"></script>
-<script src="https://cdn.datatables.net/select/2.0.0/js/dataTables.select.js"></script>
 """
-from ..html_tables import *
+START_FACET_PANEL = """
+    <div class="scroll-panel">
+"""
+END_FACET_PANEL = """
+    </div>
+"""
 
-HTML_CSS = """
-<link rel="stylesheet" href="https://cdn.datatables.net/2.0.0/css/dataTables.dataTables.css">
-<link rel="stylesheet" href="https://cdn.datatables.net/searchpanes/2.3.0/css/searchPanes.dataTables.css">
-<link rel="stylesheet" href="https://cdn.datatables.net/select/2.0.0/css/select.dataTables.css">
-<style>
-    body{padding: 20px; font-family: sans-serif;}
-    table{background-color: #E8E8E8;}
-    td{border: 1px solid black;}
-    th{border: 1px solid black;}
-    .small{font-size: 0.7em;}
-    div.fdata{width: 400px;}
-    pre{white-space: pre-wrap; width: 300px;}
-    img{height: 180px;}
-    #catdoor{ max-width: 1200px; margin: 0 auto; content-visibility: auto;}
-</style>
+END_HTML = """
+<button type="submit">Search</button>
+    </form>
+    <table id="table">
+      <tbody id="tableBody"></tbody>
+    </table>
+    <script>
+      const form = document.getElementById("searchForm");
+
+      const tbody = document.getElementById('tableBody');
+
+      form.addEventListener("submit", function (event) {
+        // Prevent page from refreshing
+        event.preventDefault();
+
+        // Create a FormData object from the form
+        const formData = new FormData(form);
+        const dataObject = Object.fromEntries(formData);
+        console.log("Plain Object:", dataObject);
+        let names = [];
+        let catears = [];
+        for (const key of Object.keys(dataObject)){
+          if (key.slice(-2) == ',c'){
+            catears.push(key);
+          }
+          if (key.slice(-2) == ',n'){
+            names.push(key);
+          }
+        }
+        let toDisplay = new Set()
+        if (names.length > 0){names.forEach(value => toDisplay = toDisplay.union(new Set(facet_map[value])));}
+        else if (catears.length > 0){toDisplay = toDisplay.union(new Set(facet_map[catears[0]]));}
+        if (catears.length > 0){catears.forEach(value => toDisplay = toDisplay.intersection(new Set(facet_map[value])));};
+        console.log(toDisplay);
+        let htmlString = ''
+        toDisplay.forEach(value => {
+          d = data[value];
+          htmlString += '<tr><td><img src="' + d['img_path'] + '"></img></td><td>' + d['etd_data']['chyron_data']['name_normalized'] + '</td></tr>';
+        })
+        tbody.innerHTML = htmlString;
+      });
+    </script>
+  </body>
+</html>
+
 """
 class html_file:
-    def __init__(self):
-        self.html_str = f"<!DOCTYPE html>\n<html lang='en'>\n<head>\n<title>cat door</title>\n{HTML_CSS}\n</head>\n<body>\n"
-        #used for error handling(trying to add a row before calling writeField, etc.)
-        self.phase = 0
+    def __init__(self, image_dir:str) -> None:
+        self.html_str = ""
+        self.name_html = []
+        self.catears_html = []
+        # this relies on the fact that python defaults to shallow copies,
+        # meaning I can edit name_html & catears_html and html_arr will change
+        dataImport = f"""
+            <script src="./{image_dir}/catout_table.js"></script>
+            <script src="./{image_dir}/facet_map.js"></script>"""
+        self.html_arr = [START_HTML, START_FACET_PANEL, self.name_html ,END_FACET_PANEL, START_FACET_PANEL, self.catears_html, dataImport, END_FACET_PANEL, END_HTML]
 
     def write_html(self, file_name:str) -> None:
-        if self.phase == 0: raise Exception(f"Called write_html out of phase, phase should be 1 or 2, phase is {self.phase}")
-        if self.phase == 1:
-            self.phase = 2
-            self.html_str += "</tbody></table>"
-            self.html_str += HTML_EXT_SCRIPTS + """
-    <script>
-        $(document).ready(function() {
-            $('#catdoor').DataTable({
-                pageLength: 100,
-                // layout: defines where the facets (searchPanes) appear
-                layout: {
-                    top1: {
-                        searchPanes: {
-                            // Set to false so it only shows what we explicitly ask for in columnDefs
-                            show: false
-                        }
-                    }
-                },
-                // configures the faceting behavior
-                columnDefs: [
-                    {
-                        searchPanes: {
-                            show: true
-                        },
-                        targets: [0, 1, 5, 7, 9]
-                    },
-                    {
-                        searchPanes: {
-                            show: false
-                        },
-                        targets: '_all' // Hide everything else explicitly
-                    }
-                ]
-            });
-        });
-    </script>
-    """
-            self.html_str += "\n\n</body></html>"
+        for i in self.html_arr:
+            if type(i) == str:
+                self.html_str += i
+            if type(i) == list:
+                for j in i:
+                    self.html_str += j
+
         with open(file_name, "w") as f:
             f.write(self.html_str)
 
-    #must be called before adding rows
-    def writeFields(self, fields=None) -> None:
-        if fields is None:
-            fields = ["asset ID", "cataloger", "export date", "time", "still image", "etd type", "etd text", "cat ears",
-                      "cat ear data", "to attend to", "message", ]
 
-        if not self.phase == 0: raise Exception(f"Called writeFields out of phase, phase should be 0, phase is {self.phase}")
-        self.phase = 1
-        self.html_str += "<table id='catdoor'><thead><tr>\n"
-        for f in fields:
-            self.html_str += f"<th>{f}</th>"
-        self.html_str += "\n</tr></thead>\n<tbody>"
+    def addNameFacet(self, facetName:str) -> None:
+        self.name_html.append(f'<p><input type="checkbox" id="{facetName}" name="{facetName}"> {facetName[:-2]}</p>')
 
-    def addRow(self, row:dict, image_path:str) -> None:
-        if not (self.phase == 1): raise Exception(f"Called addRow out of phase, phase should be 1, phase is {self.phase}")
-        self.html_str += "\n<tr>\n"
-        self.html_str += f"<td class='small'>{row['asset_id']}</td>"
-        self.html_str += f"<td>{row['cataloger']}</td>"
-        self.html_str += f"<td class='small'>{row['export_date']}</td>"
-        self.html_str += f"<td>{aapb_html_link(row['asset_id'], row['tp_time'])}</td>"
-        self.html_str += f"<td><img src='{image_path}' loading=\"lazy\" height=180px width=240px></td>"
-        self.html_str += f"<td>{row['etd_data']['etd_type']}</td>"
-        self.html_str += f"<td><pre>{row['etd_text']}</pre></td>"
-        self.html_str += f"<td>{stringify_keys(row['etd_data']['catear_data'])}</td>"
-        self.html_str += f"<td>{htmlify_catear_data(row['etd_data']['catear_data'])}</td>"
-        self.html_str += f"<td>{htmlify_attention(row['etd_data'])}</td>"
-        self.html_str += f"<td class='small'>{htmlify_messages(row['etd_data'])}</td>"
-        self.html_str += "\n</tr>\n"
+    def addCatearsFacet(self, facetName:str) -> None:
+        self.catears_html.append(f'<p><input type="checkbox" id="{facetName}" name="{facetName}"> {facetName[:-2]}</p>')
