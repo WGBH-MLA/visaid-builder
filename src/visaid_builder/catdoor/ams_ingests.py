@@ -13,11 +13,15 @@ import pprint
 
 from . import keys_catears
 
-CONTRIB_UNIQUENESS_COLS = [ "contributor","annotation","contributor_role","contributor_role_annotation"]
+
 
 ############################################################################
 # Functions for transforming string values into AMS data values
 ############################################################################
+
+def chew_copr():
+    pass
+
 
 def convert_tp_time( tp_time:str ) -> str:
     """
@@ -99,7 +103,7 @@ def map_chyron_sec( r:dict ) -> dict:
 def make_full_contrib_ingest( outtable, level='full' ):
     """
     This is the full contributor ingest format including data supported by 
-    AMS2 updates in spring 2026.
+    AMS2 updates in summer 2026.
     """
 
     # Establish detail level of data to be ingested
@@ -222,4 +226,40 @@ def make_basic_contrib_ingest( catout_table ):
 
     return make_full_contrib_ingest( catout_table, level='basic' )
 
+
+
+############################################################################
+# Module-level global dictionaries
+############################################################################
+
+KEY_ASSET_FIELD_MAP = {
+    "air":            "broadcast_date",
+    "rec":            "created_date",
+    "date":           "date",
+    "copyright-year": "copyright_date",
+    "prog-title":     "program_title",
+    "series-title":   "series_title",
+    "ep-title":       "episode_title",
+    "ep-no":          "episode_number",
+    "seg-title":      "segment_title",
+    "title":          "title",
+    "prog-desc":      "program_description",
+    "ep-desc":        "episode_description",
+    "seg-desc":       "segment_description",
+    "genre":          "genre",
+    "topic":          "topics",
+    "geo":            "spatial_coverage",
+    }
+
+
+CONTRIB_UNIQUENESS_COLS = [ 
+    "contributor",
+    "annotation",
+    "contributor_role",
+    "contributor_role_annotation", 
+    ]
+
+CHEWABLE_ASSET_KEYS = {
+    "copr":  ( chew_copr, "copyright_date" ),
+    }
 
