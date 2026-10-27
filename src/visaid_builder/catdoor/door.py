@@ -19,6 +19,7 @@ from datetime import date
 
 from . import html_tables
 from . import ams_ingests
+from . import analyses
 from . import parse_etd
 
 
@@ -117,6 +118,8 @@ def main():
         "html-key": "Show data values from key-value-style editor text",
         "html-ams-con": "Show data as would be in an AMS contributor ingest",
         "csv-ams-con": "Create CSV for AMS2 of all supported data fields for contributors",
+        "txt-full": "Create plain text file of all the editor text",
+        "txt-uniq": "Create plain text file of all unique lines in the editor text",
     }
 
     message_levels = ['none', 'problems', 'alerts', 'all']
@@ -210,11 +213,17 @@ def main():
         print("Invalid message-level specified.")
         print("Must be one of: " + ", ".join(message_levels) )
         print("Exiting.")
-        return        
+        return 
+    else:
+        message_level = args.message_level
+        
+    if args.type in ["txt-full", "txt-uniq"]:
+        message_level = 'none'
+ 
 
     # Call the primary catout processing function to create a quasi-tabular structure
     # (This is the time-consuming step.)
-    catout_table = tablify_catouts( catout_paths, message_level=args.message_level )
+    catout_table = tablify_catouts( catout_paths, message_level=message_level )
 
     # Choose the output type
     if args.type == "html-etd":
@@ -229,6 +238,10 @@ def main():
         out_str = html_tables.make_contrib_ingest_table(catout_table)
     elif args.type == "csv-ams-con":        
         out_str = ams_ingests.make_full_contrib_ingest(catout_table)
+    elif args.type == "txt-full":        
+        out_str = analyses.dump_full_text(catout_table)
+    elif args.type == "txt-uniq":        
+        out_str = analyses.dump_unique_lines(catout_table)
     elif args.type == "none":
         out_str = None
     else:
@@ -243,6 +256,8 @@ def main():
             ext = "html"
         elif args.type[:3] in ["csv", "ams"]:
             ext = "csv"
+        elif args.type[:3] == "txt":
+            ext = "txt"
         else:
             ext = "txt"
         out_fname = f"catdoor-{args.type}_{out_fname_morsel}_{date.today().isoformat()}.{ext}"
