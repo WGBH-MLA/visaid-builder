@@ -17,13 +17,14 @@ from pathlib import Path
 import json
 from datetime import date
 
+from visaid_builder.catdoor.catherder import herd_cats
 from . import html_tables
 from . import ams_ingests
 from . import analyses
 from . import parse_etd
 
 
-def tablify_catouts( paths:list, 
+def tablify_catouts( paths:list,
                      message_level:str = 'all' ) -> list:
     """
     Takes a list of filepaths to catout JSON files.
@@ -76,7 +77,7 @@ def tablify_catouts( paths:list,
             new_rows = []
             for ei in catoutd["editor_items"]:
 
-                etd_recs = parse_etd.parse_etd( ei["etd_text"], 
+                etd_recs = parse_etd.parse_etd( ei["etd_text"],
                                                 catoutd["asset_id"],
                                                 message_level=message_level )
 
@@ -120,6 +121,7 @@ def main():
         "csv-ams-con": "Create CSV for AMS2 of all supported data fields for contributors",
         "txt-full": "Create plain text file of all the editor text",
         "txt-uniq": "Create plain text file of all unique lines in the editor text",
+        "herd-cats": "Temporary description",
     }
 
     message_levels = ['none', 'problems', 'alerts', 'all']
@@ -156,7 +158,7 @@ def main():
         type=str,
         default="all",
         help="The messages in terminal output. Options: " + ", ".join(message_levels) )
-    
+
 
     args = parser.parse_args()
 
@@ -213,13 +215,13 @@ def main():
         print("Invalid message-level specified.")
         print("Must be one of: " + ", ".join(message_levels) )
         print("Exiting.")
-        return 
+        return
     else:
         message_level = args.message_level
-        
+
     if args.type in ["txt-full", "txt-uniq"]:
         message_level = 'none'
- 
+
 
     # Call the primary catout processing function to create a quasi-tabular structure
     # (This is the time-consuming step.)
@@ -236,12 +238,15 @@ def main():
         out_str = html_tables.make_keyed_data_table(catout_table)
     elif args.type == "html-ams-con":
         out_str = html_tables.make_contrib_ingest_table(catout_table)
-    elif args.type == "csv-ams-con":        
+    elif args.type == "csv-ams-con":
         out_str = ams_ingests.make_full_contrib_ingest(catout_table)
-    elif args.type == "txt-full":        
+    elif args.type == "txt-full":
         out_str = analyses.dump_full_text(catout_table)
-    elif args.type == "txt-uniq":        
+    elif args.type == "txt-uniq":
         out_str = analyses.dump_unique_lines(catout_table)
+    elif args.type == "herd-cats":
+        out_str = None
+        herd_cats(catout_table,args.output)
     elif args.type == "none":
         out_str = None
     else:

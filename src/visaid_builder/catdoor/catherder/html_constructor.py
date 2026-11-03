@@ -113,8 +113,8 @@ class html_file:
         # this relies on the fact that python defaults to shallow copies,
         # meaning I can edit name_html & catears_html and html_arr will change
         dataImport = f"""
-            <script src="./{image_dir}/catout_table.js"></script>
-            <script src="./{image_dir}/facet_map.js"></script>"""
+            <script src="./catout_table.js"></script>
+            <script src="./facet_map.js"></script>"""
         self.html_arr = [START_HTML, START_FACET_PANEL, self.name_html ,END_FACET_PANEL, START_FACET_PANEL, self.catears_html, dataImport, END_FACET_PANEL, END_HTML]
 
     def write_html(self, file_name:str) -> None:
