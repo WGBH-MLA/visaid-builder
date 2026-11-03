@@ -121,7 +121,8 @@ def main():
         "csv-ams-con": "Create CSV for AMS2 of all supported data fields for contributors",
         "txt-full": "Create plain text file of all the editor text",
         "txt-uniq": "Create plain text file of all unique lines in the editor text",
-        "herd-cats": "Temporary description",
+        "herd-cats": "Write to a directory at the output path a directory of the images and data, "
+                     "and then generate a html file to display the data",
     }
 
     message_levels = ['none', 'problems', 'alerts', 'all']

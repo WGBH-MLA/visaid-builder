@@ -17,17 +17,13 @@ def herd_cats(catout_table:list, output_path:str) -> None:
         # 24 of the characters(in the image bs64) are always a data-heading,
         # and need to be stripped for the save to work correctly
         write_image(f'./{output_path}/catpics/'+frame['img_fname'], frame['img_data_uri'][23:])
-        row = {}
-        row['img_path'] = f'./catpics/'+frame['img_fname']
-        row['etd_data'] = frame['etd_data']
+        row = {'img_path': f'./catpics/' + frame['img_fname'], 'etd_data': frame['etd_data'], 'cataloger': frame['cataloger']}
         data_json.append(row)
+    facet_map, facets = map_keys(catout_table)
 
-    facet_map, name_facets, catear_facets = map_keys(catout_table)
-
-    for facet in name_facets:
-        html.addNameFacet(facet)
-    for facet in catear_facets:
-        html.addCatearsFacet(facet)
+    for facet in facets:
+        for item in facets[facet]:
+            html.addFacet(item, facet)
     # I can't import .json in raw html for 'reasons'. But if the files are 'scripts' that actually
     # just define a object that is what the .json encodes, that's fine. And json is perfectly valid (by definition)
     # object notation in javascript.

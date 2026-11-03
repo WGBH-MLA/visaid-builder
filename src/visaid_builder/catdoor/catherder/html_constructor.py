@@ -22,7 +22,7 @@ START_HTML = """<!doctype html>
       font-size: 0.7em;
     }
     .scroll-panel {
-      width: 300px;
+      width: 200px;
       height: 150px;
       overflow: auto; /* Adds scrollbars only when content exceeds the box dimensions */
       border: 1px solid #ccc;
@@ -47,15 +47,37 @@ START_HTML = """<!doctype html>
       margin: 0 auto;
       content-visibility: auto;
     }
+    .no-results {
+        display: none;
+        color: #888;
+        font-size: 14px;
+        text-align: center;
+        padding: 10px 0;
+    }
   </style>
   <body>
   <form id="searchForm" class="parent-container">
 
 """
 START_FACET_PANEL = """
+    <div class="container">
+    <input
+          type="search"
+          id="REPLACE"
+          class="search-box"
+          placeholder="Search items..."
+        />
     <div class="scroll-panel">
 """
 END_FACET_PANEL = """
+    <div id="noResults_REPLACE" class="no-results">No matching items found</div>
+    </div>
+    <script>
+        const searchBar_REPLACE = document.getElementById('REPLACE');
+        searchBar_REPLACE.addEventListener('input', function() {
+            searchbar_listener('REPLACE');
+      })
+      </script>
     </div>
 """
 
@@ -78,59 +100,88 @@ END_HTML = """
         const formData = new FormData(form);
         const dataObject = Object.fromEntries(formData);
         console.log("Plain Object:", dataObject);
-        let names = [];
+        let other_filters = {};
         let catears = [];
         for (const key of Object.keys(dataObject)){
           if (key.slice(-2) == ',c'){
             catears.push(key);
           }
-          if (key.slice(-2) == ',n'){
-            names.push(key);
-          }
+          else if (key.slice(-2) in other_filters ){ other_filters[key.slice(-2)].append(key);}
+          else {other_filters[key.slice(-2)] = [key];}
         }
-        let toDisplay = new Set()
-        if (names.length > 0){names.forEach(value => toDisplay = toDisplay.union(new Set(facet_map[value])));}
+        let toDisplay = new Set();
+        console.log(other_filters);
+        if (Object.keys(other_filters).length > 0){
+            for (const key of Object.keys(other_filters)){
+                let temp = new Set();
+                other_filters[key].forEach(value => temp = temp.union(new Set(facet_map[value])));
+                if (toDisplay.size == 0) {toDisplay = temp;}
+                else {toDisplay = toDisplay.intersection(temp);}
+            }
+        }
         else if (catears.length > 0){toDisplay = toDisplay.union(new Set(facet_map[catears[0]]));}
         if (catears.length > 0){catears.forEach(value => toDisplay = toDisplay.intersection(new Set(facet_map[value])));};
         console.log(toDisplay);
         let htmlString = ''
         toDisplay.forEach(value => {
           d = data[value];
-          htmlString += '<tr><td><img src="' + d['img_path'] + '"></img></td><td>' + d['etd_data']['chyron_data']['name_normalized'] + '</td></tr>';
+          htmlString += REPLACE;
         })
         tbody.innerHTML = htmlString;
       });
+      function searchbar_listener(facetName){
+            const searchBar = document.getElementById(facetName);
+            const checkboxItems = document.querySelectorAll('.' + facetName);
+            const noResults = document.getElementById('noResults_'+facetName);
+            const filter = searchBar.value.toLowerCase();
+            let hasMatches = false;
+            
+            checkboxItems.forEach(item => {
+                const text = item.textContent.trim().toLowerCase();
+
+                if (text.includes(filter)) {
+                    item.style.display = 'flex';
+                    hasMatches = true;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+        // Show fallback text if nothing matches the query
+        noResults.style.display = hasMatches ? 'none' : 'block';
+        }
     </script>
   </body>
 </html>
 
 """
+TABLE_STRING = """</td><td>' + d['etd_data']['chyron_data']['name_normalized'] + '</td><td>' + d['cataloger'] + '</td></tr>' """
+
+
+dataImport = f"""
+    <script src="./catout_table.js"></script>
+    <script src="./facet_map.js"></script>"""
+
 class html_file:
     def __init__(self, image_dir:str) -> None:
         self.html_str = ""
-        self.name_html = []
-        self.catears_html = []
-        # this relies on the fact that python defaults to shallow copies,
-        # meaning I can edit name_html & catears_html and html_arr will change
-        dataImport = f"""
-            <script src="./catout_table.js"></script>
-            <script src="./facet_map.js"></script>"""
-        self.html_arr = [START_HTML, START_FACET_PANEL, self.name_html ,END_FACET_PANEL, START_FACET_PANEL, self.catears_html, dataImport, END_FACET_PANEL, END_HTML]
+        self.facet_map = {}
 
     def write_html(self, file_name:str) -> None:
-        for i in self.html_arr:
-            if type(i) == str:
-                self.html_str += i
-            if type(i) == list:
-                for j in i:
-                    self.html_str += j
-
+        self.html_str = ""
+        self.html_str += START_HTML
+        for facet in self.facet_map:
+            self.html_str += START_FACET_PANEL.replace('REPLACE', facet)
+            for item in self.facet_map[facet]:
+                self.html_str += f'<label class="{facet}"><p><input type="checkbox" id="{item}" name="{item}" value="{item}"> {item[:-2]}</p></label>';
+            self.html_str += END_FACET_PANEL.replace('REPLACE', facet)
+        self.html_str += dataImport
+        self.html_str += END_HTML.replace('REPLACE', """'<tr><td><img src="' + d['img_path'] + '"></img>""" + TABLE_STRING)
         with open(file_name, "w") as f:
             f.write(self.html_str)
 
-
-    def addNameFacet(self, facetName:str) -> None:
-        self.name_html.append(f'<p><input type="checkbox" id="{facetName}" name="{facetName}"> {facetName[:-2]}</p>')
-
-    def addCatearsFacet(self, facetName:str) -> None:
-        self.catears_html.append(f'<p><input type="checkbox" id="{facetName}" name="{facetName}"> {facetName[:-2]}</p>')
+    def addFacet(self, facetName, facet):
+        if facet not in self.facet_map:
+            self.facet_map[facet] = [facetName]
+        else:
+            self.facet_map[facet].append(facetName)
