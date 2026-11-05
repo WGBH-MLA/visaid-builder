@@ -120,6 +120,7 @@ def main():
         "csv-ams-con": "Create CSV for AMS2 of all supported data fields for contributors",
         "txt-full": "Create plain text file of all the editor text",
         "txt-uniq": "Create plain text file of all unique lines in the editor text",
+        "txt-wrds": "Create plain text file of all unique words in the editor text",
     }
 
     message_levels = ['none', 'problems', 'alerts', 'all']
@@ -242,6 +243,8 @@ def main():
         out_str = analyses.dump_full_text(catout_table)
     elif args.type == "txt-uniq":        
         out_str = analyses.dump_unique_lines(catout_table)
+    elif args.type == "txt-wrds":        
+        out_str = analyses.dump_unique_words(catout_table)
     elif args.type == "none":
         out_str = None
     else:

@@ -4,6 +4,28 @@ analyses.py
 Functions to provide transformations and anylses of catout data.
 """
 
+import re
+
+def dump_unique_words( outtable:list ) -> str:
+    """
+    Return a list of unique lines of etd_text from the catout table.
+    """
+    full_text = dump_full_text( outtable )
+
+    #raw_words = list( set( full_text.split() ) )
+    raw_words = list( set(re.findall(r'\b\w+\b', full_text)))
+
+    # omit any "words" that contain no alphabetical characters.
+    real_words = [ w for w in raw_words if any(c.isalpha() for c in w) ]
+    real_words.sort()
+
+    outtext = ""
+    for w in real_words:
+        outtext += w + "\n"
+
+    return outtext
+
+
 def dump_full_text( outtable:list ) -> str:
     """
     Concatenate and dump full etd_text from the catout table.
