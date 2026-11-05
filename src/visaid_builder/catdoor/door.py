@@ -218,7 +218,7 @@ def main():
     else:
         message_level = args.message_level
         
-    if args.type in ["txt-full", "txt-uniq"]:
+    if args.type in ["txt-full", "txt-uniq", "txt-wrds"]:
         message_level = 'none'
  
 
