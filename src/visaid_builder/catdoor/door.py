@@ -119,8 +119,8 @@ def main():
         "html-ams-con": "Show data as would be in an AMS contributor ingest",
         "csv-ams-con": "Create CSV for AMS2 of all supported data fields for contributors",
         "txt-full": "Create plain text file of all the editor text",
-        "txt-uniq": "Create plain text file of all unique lines in the editor text",
-        "txt-wrds": "Create plain text file of all unique words in the editor text",
+        "txt-line": "Create plain text file of all unique lines in the editor text",
+        "txt-word": "Create plain text file of all unique words (uncased) in the editor text",
     }
 
     message_levels = ['none', 'problems', 'alerts', 'all']
@@ -218,7 +218,7 @@ def main():
     else:
         message_level = args.message_level
         
-    if args.type in ["txt-full", "txt-uniq", "txt-wrds"]:
+    if args.type in ["txt-full", "txt-line", "txt-word"]:
         message_level = 'none'
  
 
@@ -241,9 +241,9 @@ def main():
         out_str = ams_ingests.make_full_contrib_ingest(catout_table)
     elif args.type == "txt-full":        
         out_str = analyses.dump_full_text(catout_table)
-    elif args.type == "txt-uniq":        
+    elif args.type == "txt-line":        
         out_str = analyses.dump_unique_lines(catout_table)
-    elif args.type == "txt-wrds":        
+    elif args.type == "txt-word":        
         out_str = analyses.dump_unique_words(catout_table)
     elif args.type == "none":
         out_str = None
