@@ -575,8 +575,8 @@ def create_cataid( video_path:str,
 
 
         # massage extracted text
-        if f["text"]:
-            aid_text = f["text"].replace("\\n", "\n")
+        if f["text_0"]:
+            aid_text = f["text_0"].replace("\\n", "\n")
         else:
             aid_text = ""
 

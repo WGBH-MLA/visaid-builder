@@ -216,7 +216,7 @@ def run_post( item:dict,
             movl = movls[0]
             print(ins + f'  * Max overlap at {lilhelp.tconv(movl["start"])} ({movl["start"]} ms) for {lilhelp.tconv(movl["dur"])} ({movl["dur"]} ms).')
         
-        num_td_scenes = len( [ t for t in tfsd if t["text"] ] )
+        num_td_scenes = len( [ t for t in tfsd if t["text_0"] ] )
         print(ins + "  * Scenes with a TextDocument annotation: " + str(num_td_scenes) )
 
     # Create an adjusted TimeFrame table (with scenes added and/or removed)

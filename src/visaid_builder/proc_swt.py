@@ -260,7 +260,7 @@ def tfsd_from_mmif( usemmif:Mmif,
       (4) "tp_time":  time of a representative still in milliseconds (int)
       (5) "tp_label": TimePoint label for the same representative still (string)
       (-) "tp_id":    TimePoint ID (from MMIF file) of the same representative
-      (-) "text":     text from the TextDocument alligned with this TF
+      (-) "text_0":     text from the TextDocument alligned with this TF
       (-) "reps":     dictionary of all TimePoint annoations that are the 
                       representatives for this TimeFrame (keyed to the id of 
                       the TP)
@@ -268,7 +268,7 @@ def tfsd_from_mmif( usemmif:Mmif,
            (-) "tp_label"
       (-) "td_anns":  dictionary of TextDocument annotations aligned to this 
                       TimeFrame (keyed to the ID of the TD)
-           (-) "text"
+           (-) "text_0"
            (-) "tf_id"
            (-) "origins_tp_ids"
            (-) "first_time"
@@ -321,7 +321,7 @@ def tfsd_from_mmif( usemmif:Mmif,
             tpis = ann.get_property("origins")
             origins = sorted( tpis, key = lambda i:tps[i]["time"] )
             tds[ann.get_property("id")] = {
-                "text": ann.get_property("text").value,
+                "text_0": ann.get_property("text").value,
                 "tf_id": tas[ann.get_property("id")],
                 "origins_tp_ids": origins,
                 "first_time": tps[origins[0]]["time"] }
@@ -379,11 +379,11 @@ def tfsd_from_mmif( usemmif:Mmif,
         if tf_tds:
             td_list = [ tf_tds[i] for i in tf_tds ]
             td_list.sort(key= lambda d:d["first_time"])
-            td_text_list = [ t["text"] for t in td_list ]
+            td_text_list = [ t["text_0"] for t in td_list ]
             tds_text = merge_td_texts(td_text_list)
-            tf["text"] = tds_text
+            tf["text_0"] = tds_text
         else:
-            tf["text"] = None
+            tf["text_0"] = None
 
         # Collect all the TPs that are reps for this TF
         tf["reps"] = { tp:tps[tp] for tp in tps if tp in reps }
@@ -508,7 +508,7 @@ def add_scene_subsamples( tfsd:list,
                     # if there is a TD annotation, copy the info from it
                     if td_id:
                         subsample_td_anns = { td_id: tf["td_anns"][td_id] }
-                        subsample_text = tf["td_anns"][td_id]["text"]
+                        subsample_text = tf["td_anns"][td_id]["text_0"]
                     else:
                         subsample_td_anns = None
                         subsample_text = None
@@ -524,7 +524,7 @@ def add_scene_subsamples( tfsd:list,
                         "tp_time":  tf["reps"][tp_id]["time"],
                         "tp_label": tf["reps"][tp_id]["tp_label"],
                         "tp_id":    tp_id,
-                        "text":     subsample_text,
+                        "text_0":     subsample_text,
                         "reps":     None,
                         "td_anns":  subsample_td_anns,
                         }
@@ -562,7 +562,7 @@ def add_scene_subsamples( tfsd:list,
                         "tp_time":  next_start + ( subsample_dur // 2 ) ,
                         "tp_label": None,
                         "tp_id":    None,
-                        "text":     tf["text"],
+                        "text_0":     tf["text_0"],
                         "reps":     None,
                         "td_anns":  tf["td_anns"],
                         }
@@ -668,7 +668,7 @@ def add_gap_samples( tfsd:dict,
                     "tp_label": None,
                     "tp_id": None,
                     "td_anns": None,
-                    "text": None }
+                    "text_0": None }
                 samples.append(sample)
 
                 next_sample_num += 1
@@ -771,7 +771,7 @@ def adjust_tfsd( tfsd:list,
             "tp_label": None,
             "tp_id": None,
             "td_anns": None,
-            "text": None, 
+            "text_0": None, 
             }
         tfsd.insert(0, first)
     if params["include_final_time"]:
@@ -784,7 +784,7 @@ def adjust_tfsd( tfsd:list,
             "tp_label": None,
             "tp_id": None,
             "td_anns": None,
-            "text": None,
+            "text_0": None,
             }
         tfsd.append(final)        
         
@@ -877,7 +877,7 @@ def display_tfsd(tfsd:list):
     """
     This function simply prints a simple table of TimeFrame annotations from a tfsd table
     """
-    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","text"]
+    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","text_0"]
 
     for tf in tfsd:
         line = ""
