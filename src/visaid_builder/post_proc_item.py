@@ -39,6 +39,11 @@ from pprint import pprint # DIAG
 
 from importlib.metadata import version
 
+try:
+    import tomllib  # in standard library fo Python 3.11+
+except ImportError:
+    import tomli as tomllib  # for Python < 3.11, requires tomli
+
 __version__ = version("visaid_builder")
 from . import lilhelp
 from . import proc_swt
@@ -52,7 +57,10 @@ POSTPROC_DEFAULTS = { "name": None,
                       "prog_start_min": 3000,
                       "prog_start_max": 150000,
                       "slate_rep_max": 180000,
-                      "adj_tfs": True }
+                      "adj_tfs": True, 
+                      "use_ai_helper": False,    
+                      "custom_prompt_file": None 
+                      }
 
 # Names of the artifact types that this module can create
 VALID_ARTIFACTS = [ "data", 
@@ -229,6 +237,33 @@ def run_post( item:dict,
     else:
         # adjusted TimeFrame table is same as unadjusted version
         tfsd_adj = copy.deepcopy(tfsd)
+
+
+    # Load up custom prompts (if present) 
+    if cf["prompts_dir"]:
+        prompts_dir = cf["prompts_dir"]
+    elif cf["config_dir"]:
+        prompts_dir = cf["config_dir"]
+    else:
+        prompts_dir = None
+
+    if params["custom_prompt_file"]:
+        if not prompts_dir:
+            raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
+        else:
+            prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
+            with open(prompt_file_path, "rb") as tomlfile:
+                custom_prompts = tomllib.load(tomlfile)
+    else:
+        custom_prompts = None
+
+    # Add extra text interpretation (predicted catalog values) to the dicts
+    print(ins + "Attempting to add an interpretation of extracted text...")
+    tfsd_adj = proc_swt.add_tfsd_interp( tfsd_adj, 
+                                         text_in_key = "text_0",
+                                         text_out_key = "text_1",
+                                         use_ai = params["use_ai_helper"],
+                                         custom_prompts = custom_prompts )
 
 
     # create legacy tfs tables from tfsd tables
@@ -482,12 +517,14 @@ def run_post( item:dict,
         if not cf.get("flat_dir"):
             cataids_dir += "/" + artifact
 
+        # remove this block to XXXX
         if cf["prompts_dir"]:
             prompts_dir = cf["prompts_dir"]
         elif cf["config_dir"]:
             prompts_dir = cf["config_dir"]
         else:
             prompts_dir = None
+        # remove above block to XXXX
 
         cataid_path = None
         cataid_problems = []
@@ -506,7 +543,7 @@ def run_post( item:dict,
                 proc_swt_params=proc_swt_params,
                 cataid_params=cataid_params,
                 mmif_metadata_str=mmif_metadata_str,
-                prompts_dir=prompts_dir
+                prompts_dir=prompts_dir  # remove
                 )
         except Exception as e:
             print(ins + "Creation of cataid failed.")

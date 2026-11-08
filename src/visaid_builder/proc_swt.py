@@ -46,6 +46,19 @@ from mmif import DocumentTypes
 
 from . import lilhelp
 
+from .catification_prompts import DEFAULT_PROMPTS
+
+# Import AI helper, if available
+try:
+    import gbh_ai_helper as ai
+    _GBH_AI_HELPER = True
+except ImportError as e:
+    print("Import error:",e)
+    print("Warning: `gbh_ai_helper` package not found.  Will not use.")
+    _GBH_AI_HELPER = False
+
+GBH_AI_DEPLOYMENT_ALIAS = "DEPLOY_GPT41MINI"
+
 
 # These paramaters for which there are defaults are used by `adjust_tfs`.
 # These default values are used only if 
@@ -241,7 +254,7 @@ def tfsd_from_mmif( usemmif:Mmif,
                     tp_view_id:str, 
                     tf_view_id:str,
                     td_view_id:str 
-                    ):
+                    ) -> list:
     """
     Analyzes MMIF file from SWT, combining  TimeFrame and TimePoint annotations, 
     along with associated TextDocument annotations.  
@@ -425,7 +438,7 @@ def merge_td_texts( texts:list ) -> str:
 def add_scene_subsamples( tfsd:list,
                           subsampling_params:dict,
                           default_subsampling:int,
-                          ) -> dict:
+                          ) -> list:
     """
     Adds extra samples for longer scenes.
 
@@ -583,7 +596,7 @@ def add_gap_samples( tfsd:dict,
                      max_gap:int, 
                      first_time:int,
                      final_time:int,
-                     ) -> dict:
+                     ) -> list:
     """
     Algorithm for adding extra scenes to see into the gaps between labeled
     scenes.
@@ -682,12 +695,11 @@ def add_gap_samples( tfsd:dict,
     return tfsd
 
 
-
 def adjust_tfsd( tfsd:list, 
                  first_time:int,
                  final_time:int,
                  params_in:dict 
-                 ) -> dict:
+                 ) -> list:
     """
     Adds and/or removes rows to the array returned by `tfsd_from_mmif()`.  
 
@@ -790,6 +802,149 @@ def adjust_tfsd( tfsd:list,
         
     tfsd.sort(key=lambda f:f["start"])
     return tfsd
+
+
+def add_tfsd_interp( tfsd:list,
+                     text_in_key:str = "text_0",
+                     text_out_key:str = "text_1",
+                     use_ai:bool = False,
+                     custom_prompts = {},
+                     ) -> list:
+    """
+    Add a new field to the tfsd dictionaries with its value a transformation
+    of the value of an existing field.  
+    """
+    tfsd = copy.deepcopy(tfsd)
+
+    for tf in tfsd:
+        if tf[text_in_key] is not None:
+            raw_text = tf[text_in_key]
+        else:
+            raw_text = ""
+
+        tf[text_out_key] = interp_text( raw_text = raw_text,
+                                        tf_label = tf["tf_label"],
+                                        use_ai = (use_ai and _GBH_AI_HELPER),
+                                        custom_prompts = custom_prompts )
+    return tfsd
+
+
+AI_CACHE = {}
+def interp_text( raw_text:str, 
+                 tf_label:str, 
+                 use_ai:bool = False, 
+                 custom_prompts = {}, 
+                 ) -> str:
+    """
+    Transform raw text with LLM and other rules.
+    
+    This is primarily used for generating the predicted catalog text, based
+    on the extracted text.
+
+    Use AI and custom prompts, as appropriate.
+    """
+
+    global AI_CACHE
+
+    prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
+    prompt_scene_label = prompt_scene_label.removesuffix(EXTRA_REP_LABEL_SUFFIX)
+
+    fallback = False
+    new_text = None
+
+    prompts = { "scene_prompt": None, 
+                "system_prompt": None, 
+                "addition": None, 
+                "default_text": None,
+               }
+
+    # Set prompts based on precedence
+    for ptype in prompts:
+        # 1. Custom scene-specific prompt from a collection
+        if prompts[ptype] is None and custom_prompts and ptype+"s" in custom_prompts:
+            ptype_prompts = custom_prompts[ptype+"s"]
+            if prompt_scene_label in ptype_prompts:
+                if ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = ptype_prompts[prompt_scene_label]
+        # 2. Custom non-scene-specific prompt
+        if prompts[ptype] is None and custom_prompts and ptype in custom_prompts: 
+            if custom_prompts[ptype]:
+                prompts[ptype] = custom_prompts[ptype]
+        # 3. Default (packaged) scene-specific prompt
+        if prompts[ptype] is None and ptype+"s" in DEFAULT_PROMPTS:                                
+            default_ptype_prompts = DEFAULT_PROMPTS[ptype+"s"]
+            if prompt_scene_label in default_ptype_prompts:
+                if default_ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = default_ptype_prompts[prompt_scene_label]
+        # 4. Default (packaged) non-scene-specifc prompt (unlikely)
+        if prompts[ptype] is None and ptype in DEFAULT_PROMPTS:
+            if DEFAULT_PROMPTS[ptype]:
+                prompts[ptype] = DEFAULT_PROMPTS[ptype]
+        # 5. Fallback
+        if prompts[ptype] is None:
+            prompts[ptype] = None                  
+
+
+    # first check for a default value for this scene
+    if prompts["default_text"]:
+        new_text = prompts["default_text"]
+
+    elif not raw_text.strip():
+        fallback = True
+
+    elif raw_text.strip().lower() == "none":
+        fallback = True
+
+    elif not use_ai:
+        fallback = True
+
+    elif not ( prompts["scene_prompt"] and prompts["system_prompt"] ):
+        fallback = True
+
+    else:
+        # first check AI_CACHE for this prompt and response
+        if (prompt_scene_label, raw_text) in AI_CACHE:
+            new_text = AI_CACHE[(prompt_scene_label, raw_text)]
+
+        # call the AI helper
+        else:
+            try:
+                new_text = ai.analyze_sample( prompts["scene_prompt"], 
+                                              raw_text,
+                                              system_prompt=prompts["system_prompt"],
+                                              max_tokens=100,
+                                              deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
+                
+                # insert response into AI_CACHE
+                AI_CACHE[(prompt_scene_label, raw_text)] = new_text
+
+            except Exception as e:
+                print("Warning: AI helper failed for `raw text`:")
+                print(raw_text)
+                print(e)
+                fallback = True
+
+        # check whether we got a result
+        if not new_text:
+            fallback = True
+
+    if fallback:
+        # Some minimal non-AI processing.  Originally, when we used SmolVLM2, we 
+        # normalized the case.  But that makes less sense with a model like Qwen3.5
+        # that preserves case well.
+        #new_text = titlecase( raw_text.lower() )
+        new_text = raw_text.strip()
+
+
+    # Finally, if there is an addition, add it to whatever we have
+    if prompts["addition"]:
+        if new_text:
+            new_text += "\n\n" + prompts["addition"]
+        else:
+            new_text = prompts["addition"]
+
+
+    return new_text
 
 
 

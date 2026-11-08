@@ -27,8 +27,10 @@ from titlecase import titlecase
 
 __version__ = version("visaid_builder")
 from . import lilhelp
-from .catification_prompts import DEFAULT_PROMPTS
 from .proc_swt import SUBSAMPLE_LABEL_SUFFIX, EXTRA_REP_LABEL_SUFFIX
+
+# -=X|X=- from HERE to -=X|X=- moving to other module
+from .catification_prompts import DEFAULT_PROMPTS
 
 try:
     import tomllib  # in standard library fo Python 3.11+
@@ -45,6 +47,8 @@ except ImportError as e:
     _GBH_AI_HELPER = False
 
 GBH_AI_DEPLOYMENT_ALIAS = "DEPLOY_GPT41MINI"
+# -=X|X=- from ABOVE -=X|X=- to here, moving to other module
+
 
 CATAID_DEFAULTS = { "deselected_scene_types": ["filmed text"],
                     "job_id_in_cataid_filename": False,
@@ -54,8 +58,9 @@ CATAID_DEFAULTS = { "deselected_scene_types": ["filmed text"],
                     "display_image_ms": True,
                     "aapb_timecode_link": False,
                     "max_img_height": 360,
-                    "use_ai_helper": False,
-                    "custom_prompt_file": None }
+                    "use_ai_helper": False,    # to remove
+                    "custom_prompt_file": None # to remove
+                    }
 
 STRETCH_THRESHOLD = 0.005
 
@@ -195,7 +200,7 @@ def create_cataid( video_path:str,
                    proc_swt_params:dict = {},
                    cataid_params:dict = {},
                    mmif_metadata_str: str = "",
-                   prompts_dir:str = None
+                   prompts_dir:str = None  # remove
                    ):       
     """
     Creates an HTML file (with embedded images) as a visaid with cataloging features,, 
@@ -222,7 +227,7 @@ def create_cataid( video_path:str,
         else:
             params[key] = CATAID_DEFAULTS[key]
 
-    # Load up custom prompts (if present)
+    # Load up custom prompts (if present) # remove this block
     if params["custom_prompt_file"]:
         if not prompts_dir:
             raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
@@ -580,11 +585,13 @@ def create_cataid( video_path:str,
         else:
             aid_text = ""
 
-        # create/generate etd text
-        editor_text = catify_text( aid_text, 
-                                   f["tf_label"], 
-                                   (params["use_ai_helper"] and _GBH_AI_HELPER),
-                                   custom_prompts=custom_prompts )
+        # # create/generate etd text
+        # editor_text = catify_text( aid_text, 
+        #                            f["tf_label"], 
+        #                            (params["use_ai_helper"] and _GBH_AI_HELPER),
+        #                            custom_prompts=custom_prompts )
+
+        editor_text = f["text_1"]
 
         #
         # Build main block ingredients for itemrow
