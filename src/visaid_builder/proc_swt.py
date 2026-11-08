@@ -59,6 +59,9 @@ except ImportError as e:
 
 GBH_AI_DEPLOYMENT_ALIAS = "DEPLOY_GPT41MINI"
 
+# For saving values across function calls to avoid hitting LLM more than needed
+AI_CACHE = {}
+
 
 # These paramaters for which there are defaults are used by `adjust_tfs`.
 # These default values are used only if 
@@ -822,19 +825,23 @@ def add_tfsd_interp( tfsd:list,
         else:
             raw_text = ""
 
-        tf[text_out_key] = interp_text( raw_text = raw_text,
-                                        tf_label = tf["tf_label"],
-                                        use_ai = (use_ai and _GBH_AI_HELPER),
-                                        custom_prompts = custom_prompts )
+        interp_result = interp_text( raw_text = raw_text,
+                                     tf_label = tf["tf_label"],
+                                     use_ai = (use_ai and _GBH_AI_HELPER),
+                                     custom_prompts = custom_prompts )
+
+        tf[text_out_key] = interp_result["interp"]
+        tf[text_out_key+"_ai_used"] = interp_result["ai_used"]
+        tf[text_out_key+"_ai_cache_used"] = interp_result["ai_cache_used"]
+
     return tfsd
 
 
-AI_CACHE = {}
 def interp_text( raw_text:str, 
                  tf_label:str, 
                  use_ai:bool = False, 
                  custom_prompts = {}, 
-                 ) -> str:
+                 ) -> dict:
     """
     Transform raw text with LLM and other rules.
     
@@ -843,8 +850,10 @@ def interp_text( raw_text:str,
 
     Use AI and custom prompts, as appropriate.
     """
-
     global AI_CACHE
+
+    ai_used = False
+    ai_cache_used = False
 
     prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
     prompt_scene_label = prompt_scene_label.removesuffix(EXTRA_REP_LABEL_SUFFIX)
@@ -884,28 +893,23 @@ def interp_text( raw_text:str,
         if prompts[ptype] is None:
             prompts[ptype] = None                  
 
-
     # first check for a default value for this scene
     if prompts["default_text"]:
         new_text = prompts["default_text"]
-
     elif not raw_text.strip():
         fallback = True
-
     elif raw_text.strip().lower() == "none":
         fallback = True
-
     elif not use_ai:
         fallback = True
-
     elif not ( prompts["scene_prompt"] and prompts["system_prompt"] ):
         fallback = True
-
     else:
+        ai_used = True
         # first check AI_CACHE for this prompt and response
         if (prompt_scene_label, raw_text) in AI_CACHE:
+            ai_cache_used = True
             new_text = AI_CACHE[(prompt_scene_label, raw_text)]
-
         # call the AI helper
         else:
             try:
@@ -917,13 +921,11 @@ def interp_text( raw_text:str,
                 
                 # insert response into AI_CACHE
                 AI_CACHE[(prompt_scene_label, raw_text)] = new_text
-
             except Exception as e:
                 print("Warning: AI helper failed for `raw text`:")
                 print(raw_text)
                 print(e)
                 fallback = True
-
         # check whether we got a result
         if not new_text:
             fallback = True
@@ -935,7 +937,6 @@ def interp_text( raw_text:str,
         #new_text = titlecase( raw_text.lower() )
         new_text = raw_text.strip()
 
-
     # Finally, if there is an addition, add it to whatever we have
     if prompts["addition"]:
         if new_text:
@@ -943,9 +944,13 @@ def interp_text( raw_text:str,
         else:
             new_text = prompts["addition"]
 
+    interp_result = {
+        "interp": new_text, 
+        "ai_used": ai_used,
+        "ai_cache_used": ai_cache_used,
+        }
 
-    return new_text
-
+    return interp_result
 
 
 def tfsd_to_tfs(tfsd:list):

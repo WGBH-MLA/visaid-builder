@@ -258,13 +258,19 @@ def run_post( item:dict,
         custom_prompts = None
 
     # Add extra text interpretation (predicted catalog values) to the dicts
-    print(ins + "Attempting to add an interpretation of extracted text...")
+    print(ins + "Attempting to add interpretations of extracted text...")
     tfsd_adj = proc_swt.add_tfsd_interp( tfsd_adj, 
                                          text_in_key = "text_0",
                                          text_out_key = "text_1",
                                          use_ai = params["use_ai_helper"],
                                          custom_prompts = custom_prompts )
 
+    interp_count = len ( [ tf for tf in tfsd_adj if tf["text_1"] ] )
+    ai_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_used"] ] )
+    ai_cache_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_cache_used"] ] )
+    print(ins + "Interpretations complete." )
+    print(ins + f"Number of interpretations: {interp_count}" )
+    print(ins + f"Number of interpretations by AI: {ai_uses} ({ai_cache_uses} from cache)" )
 
     # create legacy tfs tables from tfsd tables
     tfs = proc_swt.tfsd_to_tfs(tfsd)
@@ -517,15 +523,6 @@ def run_post( item:dict,
         if not cf.get("flat_dir"):
             cataids_dir += "/" + artifact
 
-        # remove this block to XXXX
-        if cf["prompts_dir"]:
-            prompts_dir = cf["prompts_dir"]
-        elif cf["config_dir"]:
-            prompts_dir = cf["config_dir"]
-        else:
-            prompts_dir = None
-        # remove above block to XXXX
-
         cataid_path = None
         cataid_problems = []
         cataid_infos = []
@@ -543,7 +540,6 @@ def run_post( item:dict,
                 proc_swt_params=proc_swt_params,
                 cataid_params=cataid_params,
                 mmif_metadata_str=mmif_metadata_str,
-                prompts_dir=prompts_dir  # remove
                 )
         except Exception as e:
             print(ins + "Creation of cataid failed.")
