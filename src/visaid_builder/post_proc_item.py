@@ -268,9 +268,8 @@ def run_post( item:dict,
     interp_count = len ( [ tf for tf in tfsd_adj if tf["text_1"] ] )
     ai_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_used"] ] )
     ai_cache_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_cache_used"] ] )
-    print(ins + "Interpretations complete." )
-    print(ins + f"Number of interpretations: {interp_count}" )
-    print(ins + f"Number of interpretations by AI: {ai_uses} ({ai_cache_uses} from cache)" )
+    print(ins + f"  * Total texts interpreted: {interp_count}" )
+    print(ins + f"  * Interpretations from AI: {ai_uses} ({ai_cache_uses} from cache)" )
 
     # create legacy tfs tables from tfsd tables
     tfs = proc_swt.tfsd_to_tfs(tfsd)
@@ -635,9 +634,9 @@ def run_post( item:dict,
 
         proxy_start_sec = proxy_start // 1000
 
-        print(ins + "Bars end:", bars_end_sec)
-        print(ins + "Slate begin:", slate_begin_sec)
-        print(ins + "Proxy start:", proxy_start_sec)
+        print(ins + "  * Bars end:   ", bars_end_sec)
+        print(ins + "  * Slate begin:", slate_begin_sec)
+        print(ins + "  * Proxy start:", proxy_start_sec)
 
         data_artifact = [{ 
             "process_metadata": {

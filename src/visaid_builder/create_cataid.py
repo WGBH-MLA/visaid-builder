@@ -23,7 +23,6 @@ from datetime import datetime
 from importlib.metadata import version
 
 import av
-from titlecase import titlecase
 
 __version__ = version("visaid_builder")
 from . import lilhelp
@@ -148,7 +147,7 @@ def create_cataid( video_path:str,
     extras["media_length"] = media_length
 
     # Table like tfsd, but with an extra columns. 
-    # Uses rows from the tfsd table, but adds additional columns for actual frame 
+    # Uses dicts from the tfsd table, but adds additional fields for actual frame 
     # time and base64 image data.
 
     tfsdi = []
@@ -249,7 +248,6 @@ def create_cataid( video_path:str,
     # Re-sort new array in terms of scene start time, then by TimeFrame id,
     # (so that subsamples come after the scenes from which they've been sampled.)
     tfsdi.sort(key=lambda f:(f["start"],f["tf_id"]))
-    #tfsdi = tfsd # TESTING
 
     # Get ingredient code strings for inclusion in HTML files
     py_dir = os.path.dirname(__file__)
@@ -330,7 +328,6 @@ def create_cataid( video_path:str,
         v = False
         line = f"<label><input type='checkbox' id='sscb' value='{t}' {'checked' if v else ''}>{t}</label>\n" 
         sample_type_checkboxes += line
-
 
     # create job information HTML snippet
     if not params["display_job_info"]:
@@ -428,12 +425,13 @@ def create_cataid( video_path:str,
             html_img_ms = f"<span class='img-ms hidden'><br>{tp_time:08} {video_frame_time:08}</span>"
 
 
-        # massage extracted text
+        # Clean up the extracted text
         if f["text_0"]:
             aid_text = f["text_0"].replace("\\n", "\n")
         else:
             aid_text = ""
 
+        # Leave the editor text as is (presumably already transformed appropriately)
         if "text_1" in f and f["text_1"]:
             editor_text = f["text_1"]
         else:

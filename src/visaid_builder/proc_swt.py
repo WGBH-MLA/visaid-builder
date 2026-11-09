@@ -861,10 +861,15 @@ def interp_text( raw_text:str,
     fallback = False
     new_text = None
 
-    prompts = { "scene_prompt": None, 
-                "system_prompt": None, 
+    # Dictionary of prompts to use for this scene
+    # "system_prompt" and "scene_prompt" are for calling AI helper
+    # "override_text" is automatic text output (without calling AI)
+    # "addition" is an automatic appendage to the output (whether from AI, from 
+    #    override, or from fallback).
+    prompts = { "system_prompt": None, 
+                "scene_prompt": None, 
+                "override_text": None,
                 "addition": None, 
-                "default_text": None,
                }
 
     # Set prompts based on precedence
@@ -893,9 +898,10 @@ def interp_text( raw_text:str,
         if prompts[ptype] is None:
             prompts[ptype] = None                  
 
-    # first check for a default value for this scene
-    if prompts["default_text"]:
-        new_text = prompts["default_text"]
+    # First check for an override value for this scene
+    if prompts["override_text"]:
+        new_text = prompts["override_text"]
+    # Then check for any reason we should use a fallback instead of AI
     elif not raw_text.strip():
         fallback = True
     elif raw_text.strip().lower() == "none":
@@ -934,13 +940,12 @@ def interp_text( raw_text:str,
         # Some minimal non-AI processing.  Originally, when we used SmolVLM2, we 
         # normalized the case.  But that makes less sense with a model like Qwen3.5
         # that preserves case well.
-        #new_text = titlecase( raw_text.lower() )
         new_text = raw_text.strip()
 
     # Finally, if there is an addition, add it to whatever we have
     if prompts["addition"]:
         if new_text:
-            new_text += "\n\n" + prompts["addition"]
+            new_text += "\n" + prompts["addition"]
         else:
             new_text = prompts["addition"]
 
