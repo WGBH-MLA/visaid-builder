@@ -430,9 +430,23 @@ def merge_td_texts( texts:list ) -> str:
             deduped.append( td.strip() )
             last = td.strip()
 
-    texts = deduped[:]
+    # Old version: Just concatenate the full list of de-duped scenes
+    # merged = ("\n\n".join(depuded)).strip()
 
-    merged = ("\n\n".join(texts)).strip()
+    # Merge by duplicating lines.
+    # Note that this hides meaningful duplications, as when a person's name 
+    # appears on a line by itself multiple times in a credits sequence.
+    # (This makes the document-level de-duping step redundnant, but we leave it
+    #  because it is an entirely reasonable first pass at winnowing, which may
+    #  make more sense in a future, better implementation..)
+    lines = []
+    for td in deduped:
+        td_lines = td.splitlines()
+        for line in td_lines:
+            if line.strip() not in lines:
+                lines.append( line.strip() )
+
+    merged = "\n".join(lines)
 
     return merged
 
