@@ -59,7 +59,9 @@ POSTPROC_DEFAULTS = { "name": None,
                       "slate_rep_max": 180000,
                       "adj_tfs": True, 
                       "use_ai_helper": False,    
-                      "custom_prompt_file": None 
+                      "custom_prompt_file": None,
+                      "ai_model_provider": "azure",
+                      "ai_model_ref": "" 
                       }
 
 # Names of the artifact types that this module can create
@@ -247,11 +249,11 @@ def run_post( item:dict,
     else:
         prompts_dir = None
 
-    if params["custom_prompt_file"]:
+    if pp_params["custom_prompt_file"]:
         if not prompts_dir:
             raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
         else:
-            prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
+            prompt_file_path = prompts_dir + "/" + pp_params["custom_prompt_file"]
             with open(prompt_file_path, "rb") as tomlfile:
                 custom_prompts = tomllib.load(tomlfile)
     else:
@@ -262,8 +264,10 @@ def run_post( item:dict,
     tfsd_adj = proc_swt.add_tfsd_interp( tfsd_adj, 
                                          text_in_key = "text_0",
                                          text_out_key = "text_1",
-                                         use_ai = params["use_ai_helper"],
-                                         custom_prompts = custom_prompts )
+                                         use_ai = pp_params["use_ai_helper"],
+                                         custom_prompts = custom_prompts,
+                                         model_provider = pp_params["ai_model_provider"],
+                                         model_ref = pp_params["ai_model_ref"] )
 
     interp_count = len ( [ tf for tf in tfsd_adj if tf["text_1"] ] )
     ai_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_used"] ] )

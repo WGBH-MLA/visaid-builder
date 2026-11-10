@@ -826,6 +826,8 @@ def add_tfsd_interp( tfsd:list,
                      text_out_key:str = "text_1",
                      use_ai:bool = False,
                      custom_prompts = {},
+                     model_provider:str = None,
+                     model_ref:str = None,
                      ) -> list:
     """
     Add a new field to the tfsd dictionaries with its value a transformation
@@ -842,7 +844,9 @@ def add_tfsd_interp( tfsd:list,
         interp_result = interp_text( raw_text = raw_text,
                                      tf_label = tf["tf_label"],
                                      use_ai = (use_ai and _GBH_AI_HELPER),
-                                     custom_prompts = custom_prompts )
+                                     custom_prompts = custom_prompts,
+                                     model_provider = model_provider,
+                                     model_ref = model_ref )
 
         tf[text_out_key] = interp_result["interp"]
         tf[text_out_key+"_ai_used"] = interp_result["ai_used"]
@@ -854,7 +858,9 @@ def add_tfsd_interp( tfsd:list,
 def interp_text( raw_text:str, 
                  tf_label:str, 
                  use_ai:bool = False, 
-                 custom_prompts = {}, 
+                 custom_prompts:dict = {}, 
+                 model_provider:str = None,
+                 model_ref:str = None,
                  ) -> dict:
     """
     Transform raw text with LLM and other rules.
@@ -933,11 +939,12 @@ def interp_text( raw_text:str,
         # call the AI helper
         else:
             try:
-                new_text = ai.analyze_sample( prompts["scene_prompt"], 
-                                              raw_text,
-                                              system_prompt=prompts["system_prompt"],
+                new_text = ai.analyze_sample( instruction = prompts["scene_prompt"], 
+                                              sample = raw_text,
+                                              system_prompt = prompts["system_prompt"],
                                               max_tokens=100,
-                                              deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
+                                              provider = model_provider,
+                                              model_ref = model_ref )
                 
                 # insert response into AI_CACHE
                 AI_CACHE[(prompt_scene_label, raw_text)] = new_text
