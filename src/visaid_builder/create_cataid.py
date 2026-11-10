@@ -23,28 +23,11 @@ from datetime import datetime
 from importlib.metadata import version
 
 import av
-from titlecase import titlecase
 
 __version__ = version("visaid_builder")
 from . import lilhelp
-from .catification_prompts import DEFAULT_PROMPTS
 from .proc_swt import SUBSAMPLE_LABEL_SUFFIX, EXTRA_REP_LABEL_SUFFIX
 
-try:
-    import tomllib  # in standard library fo Python 3.11+
-except ImportError:
-    import tomli as tomllib  # for Python < 3.11, requires tomli
-
-# Import AI helper, if available
-try:
-    import gbh_ai_helper as ai
-    _GBH_AI_HELPER = True
-except ImportError as e:
-    print("Import error:",e)
-    print("Warning: `gbh_ai_helper` package not found.  Will not use.")
-    _GBH_AI_HELPER = False
-
-GBH_AI_DEPLOYMENT_ALIAS = "DEPLOY_GPT41MINI"
 
 CATAID_DEFAULTS = { "deselected_scene_types": ["filmed text"],
                     "job_id_in_cataid_filename": False,
@@ -54,8 +37,7 @@ CATAID_DEFAULTS = { "deselected_scene_types": ["filmed text"],
                     "display_image_ms": True,
                     "aapb_timecode_link": False,
                     "max_img_height": 360,
-                    "use_ai_helper": False,
-                    "custom_prompt_file": None }
+                    }
 
 STRETCH_THRESHOLD = 0.005
 
@@ -64,123 +46,6 @@ STRETCH_THRESHOLD = 0.005
 SPECIAL_SCENE_TYPES = [ "first frame checked", 
                         "last frame checked", 
                         "unlabeled sample"] 
-
-AI_CACHE = {}
-
-
-def catify_text( raw_text:str, 
-                 tf_label:str, 
-                 use_ai:bool = True, 
-                 custom_prompts = {}, 
-                 ) -> str:
-    """
-    Transform raw text as appropriate for cataloging.
-
-    Use AI and custom prompts, as appropriate.
-    """
-
-    global AI_CACHE
-
-    prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
-    prompt_scene_label = prompt_scene_label.removesuffix(EXTRA_REP_LABEL_SUFFIX)
-
-    fallback = False
-    new_text = None
-
-    prompts = { "scene_prompt": None, 
-                "system_prompt": None, 
-                "addition": None, 
-                "default_text": None,
-               }
-
-    # Set prompts based on precedence
-    for ptype in prompts:
-        # 1. Custom scene-specific prompt from a collection
-        if prompts[ptype] is None and custom_prompts and ptype+"s" in custom_prompts:
-            ptype_prompts = custom_prompts[ptype+"s"]
-            if prompt_scene_label in ptype_prompts:
-                if ptype_prompts[prompt_scene_label]:
-                    prompts[ptype] = ptype_prompts[prompt_scene_label]
-        # 2. Custom non-scene-specific prompt
-        if prompts[ptype] is None and custom_prompts and ptype in custom_prompts: 
-            if custom_prompts[ptype]:
-                prompts[ptype] = custom_prompts[ptype]
-        # 3. Default (packaged) scene-specific prompt
-        if prompts[ptype] is None and ptype+"s" in DEFAULT_PROMPTS:                                
-            default_ptype_prompts = DEFAULT_PROMPTS[ptype+"s"]
-            if prompt_scene_label in default_ptype_prompts:
-                if default_ptype_prompts[prompt_scene_label]:
-                    prompts[ptype] = default_ptype_prompts[prompt_scene_label]
-        # 4. Default (packaged) non-scene-specifc prompt (unlikely)
-        if prompts[ptype] is None and ptype in DEFAULT_PROMPTS:
-            if DEFAULT_PROMPTS[ptype]:
-                prompts[ptype] = DEFAULT_PROMPTS[ptype]
-        # 5. Fallback
-        if prompts[ptype] is None:
-            prompts[ptype] = None                  
-
-
-    # first check for a default value for this scene
-    if prompts["default_text"]:
-        new_text = prompts["default_text"]
-
-    elif not raw_text.strip():
-        fallback = True
-
-    elif raw_text.strip().lower() == "none":
-        fallback = True
-
-    elif not use_ai:
-        fallback = True
-
-    elif not ( prompts["scene_prompt"] and prompts["system_prompt"] ):
-        fallback = True
-
-    else:
-        # first check AI_CACHE for this prompt and response
-        if (prompt_scene_label, raw_text) in AI_CACHE:
-            new_text = AI_CACHE[(prompt_scene_label, raw_text)]
-
-        # call the AI helper
-        else:
-            try:
-                new_text = ai.analyze_sample( prompts["scene_prompt"], 
-                                              raw_text,
-                                              system_prompt=prompts["system_prompt"],
-                                              max_tokens=100,
-                                              deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
-                
-                # insert response into AI_CACHE
-                AI_CACHE[(prompt_scene_label, raw_text)] = new_text
-
-            except Exception as e:
-                print("Warning: AI helper failed for `raw text`:")
-                print(raw_text)
-                print(e)
-                fallback = True
-
-        # check whether we got a result
-        if not new_text:
-            fallback = True
-
-    if fallback:
-        # Some minimal non-AI processing.  Originally, when we used SmolVLM2, we 
-        # normalized the case.  But that makes less sense with a model like Qwen3.5
-        # that preserves case well.
-        #new_text = titlecase( raw_text.lower() )
-        new_text = raw_text.strip()
-
-
-    # Finally, if there is an addition, add it to whatever we have
-    if prompts["addition"]:
-        if new_text:
-            new_text += "\n\n" + prompts["addition"]
-        else:
-            new_text = prompts["addition"]
-
-
-    return new_text
-
 
 
 def create_cataid( video_path:str, 
@@ -195,7 +60,6 @@ def create_cataid( video_path:str,
                    proc_swt_params:dict = {},
                    cataid_params:dict = {},
                    mmif_metadata_str: str = "",
-                   prompts_dir:str = None
                    ):       
     """
     Creates an HTML file (with embedded images) as a visaid with cataloging features,, 
@@ -221,17 +85,6 @@ def create_cataid( video_path:str,
             params[key] = cataid_params[key]
         else:
             params[key] = CATAID_DEFAULTS[key]
-
-    # Load up custom prompts (if present)
-    if params["custom_prompt_file"]:
-        if not prompts_dir:
-            raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
-        else:
-            prompt_file_path = prompts_dir + "/" + params["custom_prompt_file"]
-            with open(prompt_file_path, "rb") as tomlfile:
-                custom_prompts = tomllib.load(tomlfile)
-    else:
-        custom_prompts = None
 
     # Consruct output cataid filename
     if hfilename == "":
@@ -294,7 +147,7 @@ def create_cataid( video_path:str,
     extras["media_length"] = media_length
 
     # Table like tfsd, but with an extra columns. 
-    # Uses rows from the tfsd table, but adds additional columns for actual frame 
+    # Uses dicts from the tfsd table, but adds additional fields for actual frame 
     # time and base64 image data.
 
     tfsdi = []
@@ -395,7 +248,6 @@ def create_cataid( video_path:str,
     # Re-sort new array in terms of scene start time, then by TimeFrame id,
     # (so that subsamples come after the scenes from which they've been sampled.)
     tfsdi.sort(key=lambda f:(f["start"],f["tf_id"]))
-    #tfsdi = tfsd # TESTING
 
     # Get ingredient code strings for inclusion in HTML files
     py_dir = os.path.dirname(__file__)
@@ -476,7 +328,6 @@ def create_cataid( video_path:str,
         v = False
         line = f"<label><input type='checkbox' id='sscb' value='{t}' {'checked' if v else ''}>{t}</label>\n" 
         sample_type_checkboxes += line
-
 
     # create job information HTML snippet
     if not params["display_job_info"]:
@@ -574,17 +425,17 @@ def create_cataid( video_path:str,
             html_img_ms = f"<span class='img-ms hidden'><br>{tp_time:08} {video_frame_time:08}</span>"
 
 
-        # massage extracted text
-        if f["text"]:
-            aid_text = f["text"].replace("\\n", "\n")
+        # Clean up the extracted text
+        if f["text_0"]:
+            aid_text = f["text_0"].replace("\\n", "\n")
         else:
             aid_text = ""
 
-        # create/generate etd text
-        editor_text = catify_text( aid_text, 
-                                   f["tf_label"], 
-                                   (params["use_ai_helper"] and _GBH_AI_HELPER),
-                                   custom_prompts=custom_prompts )
+        # Leave the editor text as is (presumably already transformed appropriately)
+        if "text_1" in f and f["text_1"]:
+            editor_text = f["text_1"]
+        else:
+            editor_text = ""
 
         #
         # Build main block ingredients for itemrow

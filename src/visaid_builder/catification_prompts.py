@@ -107,8 +107,8 @@ DEFAULT_PROMPTS = {
         "chyron and person": _chyron_instr_02,
     },
 
-    "default_text": None,
-    "default_texts": {},
+    "override_text": None,
+    "override_texts": {},
 
     "addition": None,
     "additions": {},

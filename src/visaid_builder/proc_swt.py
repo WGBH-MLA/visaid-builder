@@ -46,6 +46,22 @@ from mmif import DocumentTypes
 
 from . import lilhelp
 
+from .catification_prompts import DEFAULT_PROMPTS
+
+# Import AI helper, if available
+try:
+    import gbh_ai_helper as ai
+    _GBH_AI_HELPER = True
+except ImportError as e:
+    print("Import error:",e)
+    print("Warning: `gbh_ai_helper` package not found.  Will not use.")
+    _GBH_AI_HELPER = False
+
+GBH_AI_DEPLOYMENT_ALIAS = "DEPLOY_GPT41MINI"
+
+# For saving values across function calls to avoid hitting LLM more than needed
+AI_CACHE = {}
+
 
 # These paramaters for which there are defaults are used by `adjust_tfs`.
 # These default values are used only if 
@@ -241,7 +257,7 @@ def tfsd_from_mmif( usemmif:Mmif,
                     tp_view_id:str, 
                     tf_view_id:str,
                     td_view_id:str 
-                    ):
+                    ) -> list:
     """
     Analyzes MMIF file from SWT, combining  TimeFrame and TimePoint annotations, 
     along with associated TextDocument annotations.  
@@ -260,7 +276,7 @@ def tfsd_from_mmif( usemmif:Mmif,
       (4) "tp_time":  time of a representative still in milliseconds (int)
       (5) "tp_label": TimePoint label for the same representative still (string)
       (-) "tp_id":    TimePoint ID (from MMIF file) of the same representative
-      (-) "text":     text from the TextDocument alligned with this TF
+      (-) "text_0":     text from the TextDocument alligned with this TF
       (-) "reps":     dictionary of all TimePoint annoations that are the 
                       representatives for this TimeFrame (keyed to the id of 
                       the TP)
@@ -268,7 +284,7 @@ def tfsd_from_mmif( usemmif:Mmif,
            (-) "tp_label"
       (-) "td_anns":  dictionary of TextDocument annotations aligned to this 
                       TimeFrame (keyed to the ID of the TD)
-           (-) "text"
+           (-) "text_0"
            (-) "tf_id"
            (-) "origins_tp_ids"
            (-) "first_time"
@@ -321,7 +337,7 @@ def tfsd_from_mmif( usemmif:Mmif,
             tpis = ann.get_property("origins")
             origins = sorted( tpis, key = lambda i:tps[i]["time"] )
             tds[ann.get_property("id")] = {
-                "text": ann.get_property("text").value,
+                "text_0": ann.get_property("text").value,
                 "tf_id": tas[ann.get_property("id")],
                 "origins_tp_ids": origins,
                 "first_time": tps[origins[0]]["time"] }
@@ -379,11 +395,11 @@ def tfsd_from_mmif( usemmif:Mmif,
         if tf_tds:
             td_list = [ tf_tds[i] for i in tf_tds ]
             td_list.sort(key= lambda d:d["first_time"])
-            td_text_list = [ t["text"] for t in td_list ]
+            td_text_list = [ t["text_0"] for t in td_list ]
             tds_text = merge_td_texts(td_text_list)
-            tf["text"] = tds_text
+            tf["text_0"] = tds_text
         else:
-            tf["text"] = None
+            tf["text_0"] = None
 
         # Collect all the TPs that are reps for this TF
         tf["reps"] = { tp:tps[tp] for tp in tps if tp in reps }
@@ -414,9 +430,23 @@ def merge_td_texts( texts:list ) -> str:
             deduped.append( td.strip() )
             last = td.strip()
 
-    texts = deduped[:]
+    # Old version: Just concatenate the full list of de-duped scenes
+    # merged = ("\n\n".join(depuded)).strip()
 
-    merged = ("\n\n".join(texts)).strip()
+    # Merge by duplicating lines.
+    # Note that this hides meaningful duplications, as when a person's name 
+    # appears on a line by itself multiple times in a credits sequence.
+    # (This makes the document-level de-duping step redundnant, but we leave it
+    #  because it is an entirely reasonable first pass at winnowing, which may
+    #  make more sense in a future, better implementation..)
+    lines = []
+    for td in deduped:
+        td_lines = td.splitlines()
+        for line in td_lines:
+            if line.strip() not in lines:
+                lines.append( line.strip() )
+
+    merged = "\n".join(lines)
 
     return merged
 
@@ -425,7 +455,7 @@ def merge_td_texts( texts:list ) -> str:
 def add_scene_subsamples( tfsd:list,
                           subsampling_params:dict,
                           default_subsampling:int,
-                          ) -> dict:
+                          ) -> list:
     """
     Adds extra samples for longer scenes.
 
@@ -508,7 +538,7 @@ def add_scene_subsamples( tfsd:list,
                     # if there is a TD annotation, copy the info from it
                     if td_id:
                         subsample_td_anns = { td_id: tf["td_anns"][td_id] }
-                        subsample_text = tf["td_anns"][td_id]["text"]
+                        subsample_text = tf["td_anns"][td_id]["text_0"]
                     else:
                         subsample_td_anns = None
                         subsample_text = None
@@ -524,7 +554,7 @@ def add_scene_subsamples( tfsd:list,
                         "tp_time":  tf["reps"][tp_id]["time"],
                         "tp_label": tf["reps"][tp_id]["tp_label"],
                         "tp_id":    tp_id,
-                        "text":     subsample_text,
+                        "text_0":     subsample_text,
                         "reps":     None,
                         "td_anns":  subsample_td_anns,
                         }
@@ -562,7 +592,7 @@ def add_scene_subsamples( tfsd:list,
                         "tp_time":  next_start + ( subsample_dur // 2 ) ,
                         "tp_label": None,
                         "tp_id":    None,
-                        "text":     tf["text"],
+                        "text_0":     tf["text_0"],
                         "reps":     None,
                         "td_anns":  tf["td_anns"],
                         }
@@ -583,7 +613,7 @@ def add_gap_samples( tfsd:dict,
                      max_gap:int, 
                      first_time:int,
                      final_time:int,
-                     ) -> dict:
+                     ) -> list:
     """
     Algorithm for adding extra scenes to see into the gaps between labeled
     scenes.
@@ -668,7 +698,7 @@ def add_gap_samples( tfsd:dict,
                     "tp_label": None,
                     "tp_id": None,
                     "td_anns": None,
-                    "text": None }
+                    "text_0": None }
                 samples.append(sample)
 
                 next_sample_num += 1
@@ -682,12 +712,11 @@ def add_gap_samples( tfsd:dict,
     return tfsd
 
 
-
 def adjust_tfsd( tfsd:list, 
                  first_time:int,
                  final_time:int,
                  params_in:dict 
-                 ) -> dict:
+                 ) -> list:
     """
     Adds and/or removes rows to the array returned by `tfsd_from_mmif()`.  
 
@@ -771,7 +800,7 @@ def adjust_tfsd( tfsd:list,
             "tp_label": None,
             "tp_id": None,
             "td_anns": None,
-            "text": None, 
+            "text_0": None, 
             }
         tfsd.insert(0, first)
     if params["include_final_time"]:
@@ -784,13 +813,163 @@ def adjust_tfsd( tfsd:list,
             "tp_label": None,
             "tp_id": None,
             "td_anns": None,
-            "text": None,
+            "text_0": None,
             }
         tfsd.append(final)        
         
     tfsd.sort(key=lambda f:f["start"])
     return tfsd
 
+
+def add_tfsd_interp( tfsd:list,
+                     text_in_key:str = "text_0",
+                     text_out_key:str = "text_1",
+                     use_ai:bool = False,
+                     custom_prompts = {},
+                     ) -> list:
+    """
+    Add a new field to the tfsd dictionaries with its value a transformation
+    of the value of an existing field.  
+    """
+    tfsd = copy.deepcopy(tfsd)
+
+    for tf in tfsd:
+        if tf[text_in_key] is not None:
+            raw_text = tf[text_in_key]
+        else:
+            raw_text = ""
+
+        interp_result = interp_text( raw_text = raw_text,
+                                     tf_label = tf["tf_label"],
+                                     use_ai = (use_ai and _GBH_AI_HELPER),
+                                     custom_prompts = custom_prompts )
+
+        tf[text_out_key] = interp_result["interp"]
+        tf[text_out_key+"_ai_used"] = interp_result["ai_used"]
+        tf[text_out_key+"_ai_cache_used"] = interp_result["ai_cache_used"]
+
+    return tfsd
+
+
+def interp_text( raw_text:str, 
+                 tf_label:str, 
+                 use_ai:bool = False, 
+                 custom_prompts = {}, 
+                 ) -> dict:
+    """
+    Transform raw text with LLM and other rules.
+    
+    This is primarily used for generating the predicted catalog text, based
+    on the extracted text.
+
+    Use AI and custom prompts, as appropriate.
+    """
+    global AI_CACHE
+
+    ai_used = False
+    ai_cache_used = False
+
+    prompt_scene_label = tf_label.removesuffix(SUBSAMPLE_LABEL_SUFFIX)
+    prompt_scene_label = prompt_scene_label.removesuffix(EXTRA_REP_LABEL_SUFFIX)
+
+    fallback = False
+    new_text = None
+
+    # Dictionary of prompts to use for this scene
+    # "system_prompt" and "scene_prompt" are for calling AI helper
+    # "override_text" is automatic text output (without calling AI)
+    # "addition" is an automatic appendage to the output (whether from AI, from 
+    #    override, or from fallback).
+    prompts = { "system_prompt": None, 
+                "scene_prompt": None, 
+                "override_text": None,
+                "addition": None, 
+               }
+
+    # Set prompts based on precedence
+    for ptype in prompts:
+        # 1. Custom scene-specific prompt from a collection
+        if prompts[ptype] is None and custom_prompts and ptype+"s" in custom_prompts:
+            ptype_prompts = custom_prompts[ptype+"s"]
+            if prompt_scene_label in ptype_prompts:
+                if ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = ptype_prompts[prompt_scene_label]
+        # 2. Custom non-scene-specific prompt
+        if prompts[ptype] is None and custom_prompts and ptype in custom_prompts: 
+            if custom_prompts[ptype]:
+                prompts[ptype] = custom_prompts[ptype]
+        # 3. Default (packaged) scene-specific prompt
+        if prompts[ptype] is None and ptype+"s" in DEFAULT_PROMPTS:                                
+            default_ptype_prompts = DEFAULT_PROMPTS[ptype+"s"]
+            if prompt_scene_label in default_ptype_prompts:
+                if default_ptype_prompts[prompt_scene_label]:
+                    prompts[ptype] = default_ptype_prompts[prompt_scene_label]
+        # 4. Default (packaged) non-scene-specifc prompt (unlikely)
+        if prompts[ptype] is None and ptype in DEFAULT_PROMPTS:
+            if DEFAULT_PROMPTS[ptype]:
+                prompts[ptype] = DEFAULT_PROMPTS[ptype]
+        # 5. Fallback
+        if prompts[ptype] is None:
+            prompts[ptype] = None                  
+
+    # First check for an override value for this scene
+    if prompts["override_text"]:
+        new_text = prompts["override_text"]
+    # Then check for any reason we should use a fallback instead of AI
+    elif not raw_text.strip():
+        fallback = True
+    elif raw_text.strip().lower() == "none":
+        fallback = True
+    elif not use_ai:
+        fallback = True
+    elif not ( prompts["scene_prompt"] and prompts["system_prompt"] ):
+        fallback = True
+    else:
+        ai_used = True
+        # first check AI_CACHE for this prompt and response
+        if (prompt_scene_label, raw_text) in AI_CACHE:
+            ai_cache_used = True
+            new_text = AI_CACHE[(prompt_scene_label, raw_text)]
+        # call the AI helper
+        else:
+            try:
+                new_text = ai.analyze_sample( prompts["scene_prompt"], 
+                                              raw_text,
+                                              system_prompt=prompts["system_prompt"],
+                                              max_tokens=100,
+                                              deployment_alias=GBH_AI_DEPLOYMENT_ALIAS )
+                
+                # insert response into AI_CACHE
+                AI_CACHE[(prompt_scene_label, raw_text)] = new_text
+            except Exception as e:
+                print("Warning: AI helper failed for `raw text`:")
+                print(raw_text)
+                print(e)
+                fallback = True
+        # check whether we got a result
+        if not new_text:
+            fallback = True
+
+    if fallback:
+        # Some minimal non-AI processing.  Originally, when we used SmolVLM2, we 
+        # normalized the case.  But that makes less sense with a model like Qwen3.5
+        # that preserves case well.
+        new_text = raw_text.strip()
+
+    # Finally, if there is an addition, add it to whatever we have
+    if prompts["addition"]:
+        if new_text:
+            new_text += "\n" + prompts["addition"]
+        else:
+            new_text = prompts["addition"]
+
+    interp_result = {
+        "interp": new_text, 
+        "ai_used": ai_used,
+        "ai_cache_used": ai_cache_used,
+        }
+
+    return interp_result
 
 
 def tfsd_to_tfs(tfsd:list):
@@ -877,7 +1056,7 @@ def display_tfsd(tfsd:list):
     """
     This function simply prints a simple table of TimeFrame annotations from a tfsd table
     """
-    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","text"]
+    key_order = ["start","end","tf_id","tf_label","tp_time","tp_id","tp_label","text_0"]
 
     for tf in tfsd:
         line = ""
