@@ -163,7 +163,7 @@ dataImport = f"""
     <script src="./facet_map.js"></script>"""
 
 class html_file:
-    def __init__(self, image_dir:str) -> None:
+    def __init__(self) -> None:
         self.html_str = ""
         self.facet_map = {}
 

@@ -12,7 +12,7 @@ def herd_cats(catout_table:list, output_path:str) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     directory = Path(f'./{output_path}/catpics/')
     directory.mkdir(parents=True, exist_ok=True)
-    html = html_file(f'{output_path}/catpics/')
+    html = html_file()
     for frame in catout_table:
         # 24 of the characters(in the image bs64) are always a data-heading,
         # and need to be stripped for the save to work correctly
