@@ -8,6 +8,8 @@ from .key_collector import map_keys
 
 def herd_cats(catout_table:list, output_path:str) -> None:
     data_json = []
+    if output_path is None:
+        output_path = 'catherder'
     directory = Path(output_path)
     directory.mkdir(parents=True, exist_ok=True)
     directory = Path(f'./{output_path}/catpics/')
