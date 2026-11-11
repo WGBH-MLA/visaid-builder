@@ -399,6 +399,12 @@ def create_cataid( video_path:str,
                            time_start_str + "</a>" )
         else:
             html_time_start = time_start_str
+        
+        # AI sparkles
+        if "text_1_ai_used" in f and f["text_1_ai_used"]:
+            sparkles = " ✨"
+        else:
+            sparkles = ""
 
         # top row of each of the item divs
         html_vis_itemcap = ( '<span class="item-top">' + 
@@ -409,7 +415,7 @@ def create_cataid( video_path:str,
                              f'<span class="engage-toggle label clickable" data-rid="{edit_row_id}">&nbsp;&nbsp;&#9703;</span>' + 
                              '</span>' )
         html_etd_itemcap = ( '<span class="item-top">' + 
-                             '<span class="label">catalog data</span>' + 
+                             f'<span class="label">catalog data{sparkles}</span>' + 
                              '<span class="label invisible">&nbsp; &#9703; </span>' + 
                              '</span>' )
 

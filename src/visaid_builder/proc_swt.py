@@ -3,16 +3,8 @@ proc_swt.py
 
 Defines functions that perform processing on MMIF output from SWT.
 
-The primary functions here are:
-`tfs_from_mmif` - creates a tfs array from an MMIF file
-`adjust_tfs` - makes adjustments to a tfs array
-
-The `adjust_tfs` function takes a parameter called `params_in` that tell it
-what adjustments to make.  These are the kinds of options specified by the
-parameters for the visaid builder.  
-
-The valid keys for `params_in` are as follows:
-    "default_to_none" (bool) - If True, then parameters not specified when `adjust_tfs` 
+Description of some module defaults
+    "default_to_none" (bool) - If True, then parameters not specified when `adjust_tfsd` 
     is called will get the value None instead of the values specified in 
     `PROC_SWT_DEFAULTS`.  
 
@@ -40,6 +32,12 @@ import logging
 import copy
 from pprint import pprint 
 
+try:
+    import tomllib  # in standard library fo Python 3.11+
+except ImportError:
+    import tomli as tomllib  # for Python < 3.11, requires tomli
+
+
 from mmif import Mmif
 from mmif import AnnotationTypes
 from mmif import DocumentTypes
@@ -57,19 +55,17 @@ except ImportError as e:
     print("Warning: `gbh_ai_helper` package not found.  Will not use.")
     _GBH_AI_HELPER = False
 
-GBH_AI_DEPLOYMENT_ALIAS = "DEPLOY_GPT41MINI"
-
-# For saving values across function calls to avoid hitting LLM more than needed
-AI_CACHE = {}
-
-
 # These paramaters for which there are defaults are used by `adjust_tfs`.
 # These default values are used only if 
 #   1) the key is not included in `params_in`
 #   2) the value of "default_to_none" is `False`.
-PROC_SWT_DEFAULTS = { "default_to_none": True,
+# If "default_to_none" is True, then parameters not explicitly passed in will be 
+# assigned the `None` value.  Setting "default_to_none" manually to True is useful 
+# for ensuring that you don't use any of these parameters accidentally.
+PROC_SWT_DEFAULTS = { "default_to_none": False,
                       "include_only": None,
                       "exclude": [],
+                      "adj_tfs": True, 
                       "max_unsampled_gap": 60000,
                       "subsampling": { 
                           "bars": 30000,
@@ -82,11 +78,78 @@ PROC_SWT_DEFAULTS = { "default_to_none": True,
                           },
                       "default_subsampling": 30000,
                       "include_first_time": True,
-                      "include_final_time": True }
+                      "include_final_time": True, 
+                      "use_ai_helper": False,    
+                      "custom_prompt_file": None,
+                      "ai_model_provider": None,
+                      "ai_model_ref": "",
+                      }
+
 
 # These constants must match the JavaScript constants in the cataid embedded logic
 SUBSAMPLE_LABEL_SUFFIX = " - - -"
 EXTRA_REP_LABEL_SUFFIX = " - + -"
+
+
+# For saving values across function calls to avoid hitting LLM more than needed
+AI_CACHE = {}
+
+
+def set_param_defaults( params_in:dict ):
+    """
+    Take the set of parameters passed in and intelligently flesh out into a full
+    set of parameters.
+    """
+
+    # Warn about spurious parameters
+    for key in params_in:
+        if key not in PROC_SWT_DEFAULTS:
+            logging.warning("Warning: `" + key + "` is not a valid param for tfsd adjustment. Ignoring.")
+
+    # Set parameters not passed in to their default values
+    # If "default_to_none" is True, then parameters not explicitly passed in will be 
+    # assigned the `None` value.
+    params = {}
+
+    # First, set the value for "default_to_none"
+    if "default_to_none" in params_in:
+        params["default_to_none"] = params_in["default_to_none"]
+    else:
+        params["default_to_none"] = PROC_SWT_DEFAULTS["default_to_none"]
+
+    # Now, set the values for the other keys
+    for key in PROC_SWT_DEFAULTS:
+        if key == "default_to_none":
+            # value should be already set; don't want to re-set it
+            params[key] = params[key]
+        elif key in params_in:
+            params[key] = params_in[key]
+        elif not params["default_to_none"]:
+            params[key] = PROC_SWT_DEFAULTS[key]
+        else:
+            params[key] = None
+
+    # Validate AI-related prompts
+    if params["use_ai_helper"]:
+        if not _GBH_AI_HELPER:
+            raise RunTimeError("Postprocess indicates 'use_ai_helper', but `gbh_ai_helper` is unavailable.")
+
+        if not params["ai_model_provider"] and not params["default_to_none"]:
+            params["ai_model_provider"] = ai.DEFAULT_PROVIDER
+            logging.warning(f"No AI provider specified. Using default: {params['ai_model_provider']}" )
+        
+        if str(params['ai_model_provider']).lower() not in ai.AVAILABLE_PROVIDERS:
+            raise ValueError(f"Invalid AI model provider: {params['ai_model_provider']}")
+        
+        if not params["ai_model_ref"] and not params["default_to_none"]:
+            if params["ai_model_provider"] == "azure":
+                params["ai_model_ref"] = ai.DEFAULT_AZURE_DEPLOYMENT
+            elif params["ai_model_provider"] == "bedrock":
+                params["ai_model_ref"] = ai.DEFAULT_BEDROCK_MODEL
+            logging.warning(f"No AI model reference specified. Using {params['ai_model_provider']} default: {params['ai_model_ref']}" )
+
+    return params
+
 
 def get_swt_view_ids(usemmif:Mmif):
     """
@@ -715,7 +778,7 @@ def add_gap_samples( tfsd:dict,
 def adjust_tfsd( tfsd:list, 
                  first_time:int,
                  final_time:int,
-                 params_in:dict 
+                 params:dict 
                  ) -> list:
     """
     Adds and/or removes rows to the array returned by `tfsd_from_mmif()`.  
@@ -742,35 +805,9 @@ def adjust_tfsd( tfsd:list,
         logging.warning("Warning: first or final time was not supplied.  Will not adjust tfsd.")
         return tfsd
 
-    # Warn about spurious parameters
-    for key in params_in:
-        if key not in PROC_SWT_DEFAULTS:
-            logging.warning("Warning: `" + key + "` is not a valid param for tfsd adjustment. Ignoring.")
-
-    # Set parameters not passed in to their default values
-    # If "default_to_none" is True, then parameters not explicitly passed in will be 
-    # assigned the `None` value.
-    params = {}
-
-    # First, set the value for "default_to_none"
-    if "default_to_none" in params_in:
-        params["default_to_none"] = params_in["default_to_none"]
-    elif "default_to_none" in PROC_SWT_DEFAULTS:
-        params["default_to_none"] = PROC_SWT_DEFAULTS["default_to_none"]
-    else:
-        params["default_to_none"] = True
-
-    # Now, set the values for the other keys
-    for key in PROC_SWT_DEFAULTS:
-        if key == "default_to_none":
-            # value should be already set; don't want to re-set it
-            params[key] = params[key]
-        elif key in params_in:
-            params[key] = params_in[key]
-        elif not params["default_to_none"]:
-            params[key] = PROC_SWT_DEFAULTS[key]
-        else:
-            params[key] = None
+    # Check for the parameter that controls this.
+    if not params["adj_tfs"]:
+        return tfsd
 
     # Go ahead and filter out scene types, according to parameters
     if params["include_only"] is not None:
@@ -822,18 +859,26 @@ def adjust_tfsd( tfsd:list,
 
 
 def add_tfsd_interp( tfsd:list,
+                     proc_swt_params: dict,
+                     prompts_dir: str = None,
                      text_in_key:str = "text_0",
                      text_out_key:str = "text_1",
-                     use_ai:bool = False,
-                     custom_prompts = {},
-                     model_provider:str = None,
-                     model_ref:str = None,
                      ) -> list:
     """
     Add a new field to the tfsd dictionaries with its value a transformation
     of the value of an existing field.  
     """
     tfsd = copy.deepcopy(tfsd)
+
+    if proc_swt_params["custom_prompt_file"]:
+        if not prompts_dir:
+            raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
+        else:
+            prompt_file_path = prompts_dir + "/" + proc_swt_params["custom_prompt_file"]
+            with open(prompt_file_path, "rb") as tomlfile:
+                custom_prompts = tomllib.load(tomlfile)
+    else:
+        custom_prompts = None
 
     for tf in tfsd:
         if tf[text_in_key] is not None:
@@ -843,10 +888,10 @@ def add_tfsd_interp( tfsd:list,
 
         interp_result = interp_text( raw_text = raw_text,
                                      tf_label = tf["tf_label"],
-                                     use_ai = (use_ai and _GBH_AI_HELPER),
+                                     use_ai = (proc_swt_params["use_ai_helper"] and _GBH_AI_HELPER),
                                      custom_prompts = custom_prompts,
-                                     model_provider = model_provider,
-                                     model_ref = model_ref )
+                                     model_provider = proc_swt_params['ai_model_provider'],
+                                     model_ref = proc_swt_params['ai_model_ref'] )
 
         tf[text_out_key] = interp_result["interp"]
         tf[text_out_key+"_ai_used"] = interp_result["ai_used"]

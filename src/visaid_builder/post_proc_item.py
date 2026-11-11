@@ -39,10 +39,14 @@ from pprint import pprint # DIAG
 
 from importlib.metadata import version
 
+# Import AI helper, if available
 try:
-    import tomllib  # in standard library fo Python 3.11+
-except ImportError:
-    import tomli as tomllib  # for Python < 3.11, requires tomli
+    import gbh_ai_helper as ai
+    _GBH_AI_HELPER = True
+except ImportError as e:
+    print("Import error:",e)
+    print("Warning: `gbh_ai_helper` package not found.  Will not use.")
+    _GBH_AI_HELPER = False
 
 __version__ = version("visaid_builder")
 from . import lilhelp
@@ -57,11 +61,6 @@ POSTPROC_DEFAULTS = { "name": None,
                       "prog_start_min": 3000,
                       "prog_start_max": 150000,
                       "slate_rep_max": 180000,
-                      "adj_tfs": True, 
-                      "use_ai_helper": False,    
-                      "custom_prompt_file": None,
-                      "ai_model_provider": "azure",
-                      "ai_model_ref": "" 
                       }
 
 # Names of the artifact types that this module can create
@@ -149,6 +148,10 @@ def run_post( item:dict,
     for key in proc_swt.PROC_SWT_DEFAULTS:
         if key in params:
             proc_swt_params[key] = params[key]
+
+    # set intelligent defaults from module
+    proc_swt_params = proc_swt.set_param_defaults( proc_swt_params )
+    
     visaid_params = {}
     for key in create_visaid.VISAID_DEFAULTS:
         if key in params:
@@ -229,16 +232,14 @@ def run_post( item:dict,
         num_td_scenes = len( [ t for t in tfsd if t["text_0"] ] )
         print(ins + "  * Scenes with a TextDocument annotation: " + str(num_td_scenes) )
 
+
     # Create an adjusted TimeFrame table (with scenes added and/or removed)
-    if pp_params["adj_tfs"] and final_time is not None:
-        tfsd_adj = proc_swt.adjust_tfsd( tfsd, 
-                                         first_time, 
-                                         final_time, 
-                                         proc_swt_params )        
-        print(ins + f"  * Scene list length adjustment: {len(tfsd)} -> {len(tfsd_adj)}")
-    else:
-        # adjusted TimeFrame table is same as unadjusted version
-        tfsd_adj = copy.deepcopy(tfsd)
+    print(ins + "Attempting adjust or supplmenent SWT scene list...")
+    tfsd_adj = proc_swt.adjust_tfsd( tfsd, 
+                                     first_time, 
+                                     final_time, 
+                                     proc_swt_params ) 
+    print(ins + f"  * Scene list length adjustment: {len(tfsd)} -> {len(tfsd_adj)}")
 
 
     # Load up custom prompts (if present) 
@@ -249,31 +250,24 @@ def run_post( item:dict,
     else:
         prompts_dir = None
 
-    if pp_params["custom_prompt_file"]:
-        if not prompts_dir:
-            raise ValueError("A `custom_prompt_file` was specified by there is no `prompts_dir`.")
-        else:
-            prompt_file_path = prompts_dir + "/" + pp_params["custom_prompt_file"]
-            with open(prompt_file_path, "rb") as tomlfile:
-                custom_prompts = tomllib.load(tomlfile)
-    else:
-        custom_prompts = None
-
     # Add extra text interpretation (predicted catalog values) to the dicts
     print(ins + "Attempting to add interpretations of extracted text...")
-    tfsd_adj = proc_swt.add_tfsd_interp( tfsd_adj, 
+
+    tfsd_adj = proc_swt.add_tfsd_interp( tfsd_adj,
+                                         proc_swt_params,
+                                         prompts_dir = prompts_dir, 
                                          text_in_key = "text_0",
                                          text_out_key = "text_1",
-                                         use_ai = pp_params["use_ai_helper"],
-                                         custom_prompts = custom_prompts,
-                                         model_provider = pp_params["ai_model_provider"],
-                                         model_ref = pp_params["ai_model_ref"] )
+                                         )
 
+    # Prepare some stats about the interpretation step
     interp_count = len ( [ tf for tf in tfsd_adj if tf["text_1"] ] )
     ai_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_used"] ] )
     ai_cache_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_cache_used"] ] )
     print(ins + f"  * Total texts interpreted: {interp_count}" )
     print(ins + f"  * Interpretations from AI: {ai_uses} ({ai_cache_uses} from cache)" )
+    if ai_uses:
+        print(ins + f"  * AI model used: {ai.get_source_model(proc_swt_params['ai_model_provider'], proc_swt_params['ai_model_ref'])}" )
 
     # create legacy tfs tables from tfsd tables
     tfs = proc_swt.tfsd_to_tfs(tfsd)
