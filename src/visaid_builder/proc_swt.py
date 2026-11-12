@@ -3,10 +3,10 @@ proc_swt.py
 
 Defines functions that perform processing on MMIF output from SWT.
 
-Description of some module defaults
-    "default_to_none" (bool) - If True, then parameters not specified when `adjust_tfsd` 
-    is called will get the value None instead of the values specified in 
-    `PROC_SWT_DEFAULTS`.  
+Description of some module default values
+
+    "default_to_none" (bool) - If True, then parameters not specified will 
+    get the value `None` instead of the values specified in `PROC_SWT_DEFAULTS`.  
 
     "include_only" (list) - A list of postbin categories such that only those bins should
     be included.  
@@ -51,8 +51,8 @@ try:
     import gbh_ai_helper as ai
     _GBH_AI_HELPER = True
 except ImportError as e:
-    print("Import error:",e)
-    print("Warning: `gbh_ai_helper` package not found.  Will not use.")
+    logging.warning(f"Import error: {e}")
+    logging.warning(f"Warning: `gbh_ai_helper` package not found.  Will not use.")
     _GBH_AI_HELPER = False
 
 # These paramaters for which there are defaults are used by `adjust_tfs`.
@@ -85,20 +85,25 @@ PROC_SWT_DEFAULTS = { "default_to_none": False,
                       "ai_model_ref": "",
                       }
 
-
 # These constants must match the JavaScript constants in the cataid embedded logic
 SUBSAMPLE_LABEL_SUFFIX = " - - -"
 EXTRA_REP_LABEL_SUFFIX = " - + -"
 
+# These are scene types (optionally) created by `proc_swt`, not defined by the 
+# SWT bins.  They are displayed in a different area of the page layout in cataids.
+SPECIAL_SCENE_TYPES = [ "first frame checked", 
+                        "last frame checked", 
+                        "unlabeled sample",
+                        ] 
 
 # For saving values across function calls to avoid hitting LLM more than needed
 AI_CACHE = {}
 
 
-def set_param_defaults( params_in:dict ):
+def set_param_defaults( params_in:dict ) -> dict:
     """
-    Take the set of parameters passed in and intelligently flesh out into a full
-    set of parameters.
+    Take the dict of parameters passed in and intelligently flesh out into a 
+    full set of parameters, based on defaults.  Return full dict of parameters.
     """
 
     # Warn about spurious parameters
@@ -106,7 +111,7 @@ def set_param_defaults( params_in:dict ):
         if key not in PROC_SWT_DEFAULTS:
             logging.warning("Warning: `" + key + "` is not a valid param for tfsd adjustment. Ignoring.")
 
-    # Set parameters not passed in to their default values
+    # Set parameters not passed in to their default values.
     # If "default_to_none" is True, then parameters not explicitly passed in will be 
     # assigned the `None` value.
     params = {}
@@ -117,10 +122,11 @@ def set_param_defaults( params_in:dict ):
     else:
         params["default_to_none"] = PROC_SWT_DEFAULTS["default_to_none"]
 
-    # Now, set the values for the other keys
+    # Now, set the values for the other keys, according to whether to default
+    # to defaults or default to None.
     for key in PROC_SWT_DEFAULTS:
         if key == "default_to_none":
-            # value should be already set; don't want to re-set it
+            # Special case. This value should be already set; don't want to re-set it
             params[key] = params[key]
         elif key in params_in:
             params[key] = params_in[key]
@@ -130,6 +136,7 @@ def set_param_defaults( params_in:dict ):
             params[key] = None
 
     # Validate AI-related prompts
+    # Use defaults from user environment and AI helper module, if appropriate.
     if params["use_ai_helper"]:
         if not _GBH_AI_HELPER:
             raise RunTimeError("Postprocess indicates 'use_ai_helper', but `gbh_ai_helper` is unavailable.")
@@ -153,15 +160,14 @@ def set_param_defaults( params_in:dict ):
 
 def get_swt_view_ids(usemmif:Mmif):
     """
-    Takes a MMIF string and returns the IDs of the TimePoint containg view and the 
-    TimeFrame containing view relevant to SWT processing
+    Takes a MMIF string and returns the IDs of the TimePoint containg view and 
+    the TimeFrame containing view relevant to SWT processing
     
-    NOTE:
-    This function assumes that a valid view will have "swt-detection" as a substring 
-    of the view metadata "app" property.
+    NOTE:  This function assumes that a valid view will have "swt-detection" as 
+    a substring of the view metadata "app" property.
 
-    If there are several views fiting the criteria, this function picks the *final*
-    such view.
+    If there are several views fiting the criteria, this function picks the 
+    *final* such view.
     """
 
     tp_views = usemmif.get_all_views_contain(AnnotationTypes.TimePoint)
@@ -188,15 +194,14 @@ def get_swt_view_ids(usemmif:Mmif):
 
 def get_td_view_id(usemmif:Mmif):
     """
-    Takes a MMIF string and returns the ID of a view with TextDocument annotations
-    from a captioner app.
+    Takes a MMIF string and returns the ID of a view with TextDocument 
+    annotations from a captioner app.
     
-    NOTE:
-    This function assumes that a valid view will have "captioner" as a substring 
-    of the view metadata "app" property.
+    NOTE: This function assumes that a valid view will have "captioner" 
+    as a substring of the view metadata "app" property.
 
-    If there are several views fiting the criteria, this function picks the *first*
-    such view.
+    If there are several views fiting the criteria, this function picks the 
+    *first* such view.
     """
 
     td_views = usemmif.get_all_views_contain(DocumentTypes.TextDocument)
@@ -225,10 +230,9 @@ def get_mmif_metadata_str( usemmif:Mmif,
     Returns prettified serialized JSON for that metadata.
     
     This is a helper function for this module, not a general function for
-    grabbing metadata from MMIF files. It is useful for extracting serialized
-    CLAMS metadata for inclusion or display in CLAMS consuming procedures.
+    grabbing metadata from MMIF files. It is useful for reporting, e.g., 
+    for inclusion or display in visaids or other MMIF-consumers.
     """
-
     if tp_view_id is None:
         tp_d = {}
     else:
@@ -262,12 +266,11 @@ def get_mmif_metadata_str( usemmif:Mmif,
 
 def get_CLAMS_app_ver( usemmif:Mmif, view_id:str ):
     """
-    Gets the CLAMS version number for a given view
+    Gets the CLAMS version number for a given view.
 
     This is useful for conditional logic, where program execution depends
     on the version(s) of the CLAMS app used.
     """
-
     if view_id is None:
         ver = None
     else:
@@ -287,7 +290,6 @@ def first_final_time_in_mmif( usemmif:Mmif, tp_view_id:str ):
     Takes serialized MMIF as a string as input.
     Analyzes MMIF with TimePoints and returns the times of the first and final ones.
     """
-
     # get the view
     if tp_view_id:
         tp_view = usemmif.get_view_by_id(tp_view_id)
@@ -354,12 +356,12 @@ def tfsd_from_mmif( usemmif:Mmif,
     
     The "tp_time", "tp_label", and "tp_id" are for just one representative 
     TimePoint for the relevant TimeFrame.  When there are several representatives,
-    one is chosen from near the middle of the sequence.
-
-    The "reps" and "td_anns" values are used for subsampling and pulling the 
-    TD annotations from particular reps.
+    one is chosen from near the middle of the sequence.  
+    
+    The complete set of representatives for the TimeFrame can be found under 
+    the "reps" key. The "reps" and "td_anns" values are used for subsampling and 
+    pulling the TD annotations from particular reps.
     """
-
     # Start with an empty list of TimeFrame annotations
     tfsd = []
 
@@ -481,11 +483,11 @@ def tfsd_from_mmif( usemmif:Mmif,
 def merge_td_texts( texts:list ) -> str:
     """
     Take a list of strings (typically multi-line screen OCRs).
-    Marges them into a single longer string.
+    M3rges them into a single longer string.
 
-    (Removes consecutive duplicate full texts.)
+    Performs some moderate removal of redundancies.
     """
-    # remove consecutive duplicates
+    # remove consecutive duplicate/identical documents
     deduped = []
     last = ""
     for td in texts:
@@ -493,7 +495,8 @@ def merge_td_texts( texts:list ) -> str:
             deduped.append( td.strip() )
             last = td.strip()
 
-    # Old version: Just concatenate the full list of de-duped scenes
+    # # Old version: Just concatenate de-dupe the set of TDs themselves 
+    # # and concatenate
     # merged = ("\n\n".join(depuded)).strip()
 
     # Merge by duplicating lines.
@@ -524,6 +527,8 @@ def add_scene_subsamples( tfsd:list,
 
     Uses extra representatives if they're there.  Otherwise performs
     arithmetic subampling.
+
+    Returns a (possibly) enlarged tfsd list.
     """
     tfsd = copy.deepcopy(tfsd)
 
@@ -683,6 +688,8 @@ def add_gap_samples( tfsd:dict,
 
     The `max_gap` value controls the largest gap between scenes that does
     not trigger interspersal of new scenes.
+
+    Returns a (possibly) enlarged tfsd list.
     """
     tfsd = copy.deepcopy(tfsd)
 
@@ -775,6 +782,7 @@ def add_gap_samples( tfsd:dict,
     return tfsd
 
 
+
 def adjust_tfsd( tfsd:list, 
                  first_time:int,
                  final_time:int,
@@ -858,6 +866,7 @@ def adjust_tfsd( tfsd:list,
     return tfsd
 
 
+
 def add_tfsd_interp( tfsd:list,
                      proc_swt_params: dict,
                      prompts_dir: str = None,
@@ -867,6 +876,13 @@ def add_tfsd_interp( tfsd:list,
     """
     Add a new field to the tfsd dictionaries with its value a transformation
     of the value of an existing field.  
+
+    This can run even if the "text_0" field is empty, for instance if the user
+    wants to add a default value for certain scenes.
+
+    Unlike the functions that add scenes (like subsamples or unlabled samples), 
+    this function adds additional values to the existing list elements.  
+    (The overall size of the scene list remains constant.)
     """
     tfsd = copy.deepcopy(tfsd)
 
@@ -900,6 +916,7 @@ def add_tfsd_interp( tfsd:list,
     return tfsd
 
 
+
 def interp_text( raw_text:str, 
                  tf_label:str, 
                  use_ai:bool = False, 
@@ -914,6 +931,9 @@ def interp_text( raw_text:str,
     on the extracted text.
 
     Use AI and custom prompts, as appropriate.
+
+    Return a dict with the main value in "interp" and other keys containing
+    processing metadata.
     """
     global AI_CACHE
 
@@ -1022,6 +1042,7 @@ def interp_text( raw_text:str,
         }
 
     return interp_result
+
 
 
 def tfsd_to_tfs(tfsd:list):

@@ -163,27 +163,21 @@ def run_post( item:dict,
 
 
     #
-    # Perform foundational processing of MMIF file
+    # Perform foundational processing of MMIF files
     #
-
     print(ins + "Attempting to process MMIF into SWT scene list...")
 
     # Open MMIF and start processing
     mmif_path = item["mmif_paths"][-1]
     with open(mmif_path, "r") as file:
         mmif_str = file.read()
-
     usemmif = Mmif(mmif_str)
 
     # Get the right views
     tp_view_id, tf_view_id = proc_swt.get_swt_view_ids(usemmif)
     td_view_id = proc_swt.get_td_view_id(usemmif)
 
-    #print("**** TD view ID: " + str(td_view_id) ) #DIAG
-    #print("**** smolvc version: " + proc_swt.get_CLAMS_app_ver(usemmif, td_view_id) ) #DIAG
-
     # call SWT MMIF processors to get a table of time frames
-
     tfsd = proc_swt.tfsd_from_mmif( usemmif, 
                                     tp_view_id,
                                     tf_view_id,
@@ -201,9 +195,8 @@ def run_post( item:dict,
     else:    
         print(ins + f"  * No TimePoint annotations.")
 
+    # if we have any SWT TimeFrames, print some additional stats
     if len(tfsd):
-        # if we have any SWT TimeFrames, print some additional stats
-
         dur = int( mean( [ t["end"] - t["start"] for t in tfsd ] ) )
         print(ins + f"  * Mean SWT scene length:   {lilhelp.tconv(dur)} ({dur} ms)" )
 
@@ -216,14 +209,8 @@ def run_post( item:dict,
         overlaps = proc_swt.find_overlaps( tfsd )
         print(ins + "  * Number of scene overlaps: " + str(len(overlaps)) )
         if overlaps:
-            # dur = int( mean( [ t["dur"] for t in overlaps ] ) )
-            # print(ins + f"  * Mean overlap length:   {lilhelp.tconv(dur)} ({dur} ms)" )
-
             dur = int( median( [ t["dur"] for t in overlaps ] ) )
             print(ins + f"  * Median overlap length: {lilhelp.tconv(dur)} ({dur} ms)" )
-
-            # dur = max( [ t["dur"] for t in overlaps ] )
-            # print(ins + f"  * Max overlap length:    {lilhelp.tconv(dur)} ({dur} ms)" )
 
             movls = sorted(overlaps, key=lambda t:t["dur"], reverse=True)
             movl = movls[0]
@@ -232,16 +219,26 @@ def run_post( item:dict,
         num_td_scenes = len( [ t for t in tfsd if t["text_0"] ] )
         print(ins + "  * Scenes with a TextDocument annotation: " + str(num_td_scenes) )
 
-
+    #
+    # Add supplemetary scenes to the table of scenes
+    #
     # Create an adjusted TimeFrame table (with scenes added and/or removed)
     print(ins + "Attempting adjust or supplmenent SWT scene list...")
     tfsd_adj = proc_swt.adjust_tfsd( tfsd, 
                                      first_time, 
                                      final_time, 
                                      proc_swt_params ) 
-    print(ins + f"  * Scene list length adjustment: {len(tfsd)} -> {len(tfsd_adj)}")
+    extra_samples = len( [ t for t in tfsd_adj if t["tf_label"] in proc_swt.SPECIAL_SCENE_TYPES ] )
+    subsamples = len( [ t for t in tfsd_adj if 
+                        t["tf_label"].find(proc_swt.SUBSAMPLE_LABEL_SUFFIX) > -1 or 
+                        t["tf_label"].find(proc_swt.EXTRA_REP_LABEL_SUFFIX) > -1 ] )
+    print(ins + f"  * Scene subsamples added: {subsamples}")
+    print(ins + f"  * Extra samples added:    {extra_samples}")
+    print(ins + f"  * Overall scene list adjustment: {len(tfsd)} -> {len(tfsd_adj)}")
 
-
+    #
+    # Add supplemetary text interpretations
+    #
     # Load up custom prompts (if present) 
     if cf["prompts_dir"]:
         prompts_dir = cf["prompts_dir"]
@@ -260,7 +257,7 @@ def run_post( item:dict,
                                          text_out_key = "text_1",
                                          )
 
-    # Prepare some stats about the interpretation step
+    # Print some stats about the interpretation step
     interp_count = len ( [ tf for tf in tfsd_adj if tf["text_1"] ] )
     ai_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_used"] ] )
     ai_cache_uses = len( [ tf for tf in tfsd_adj if tf["text_1_ai_cache_used"] ] )
@@ -269,6 +266,9 @@ def run_post( item:dict,
     if ai_uses:
         print(ins + f"  * AI model used: {ai.get_source_model(proc_swt_params['ai_model_provider'], proc_swt_params['ai_model_ref'])}" )
 
+    #
+    # Gather other data
+    #
     # create legacy tfs tables from tfsd tables
     tfs = proc_swt.tfsd_to_tfs(tfsd)
     tfs_adj = proc_swt.tfsd_to_tfs(tfsd_adj)

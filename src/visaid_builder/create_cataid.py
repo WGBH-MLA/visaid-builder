@@ -26,7 +26,7 @@ import av
 
 __version__ = version("visaid_builder")
 from . import lilhelp
-from .proc_swt import SUBSAMPLE_LABEL_SUFFIX, EXTRA_REP_LABEL_SUFFIX
+from .proc_swt import SUBSAMPLE_LABEL_SUFFIX, EXTRA_REP_LABEL_SUFFIX, SPECIAL_SCENE_TYPES
 
 
 CATAID_DEFAULTS = { "deselected_scene_types": ["filmed text"],
@@ -40,13 +40,6 @@ CATAID_DEFAULTS = { "deselected_scene_types": ["filmed text"],
                     }
 
 STRETCH_THRESHOLD = 0.005
-
-# These are scene types (optionally) created by `proc_swt`, not defined by the 
-# SWT bins.  They are displayed in a different area of the page layout.
-SPECIAL_SCENE_TYPES = [ "first frame checked", 
-                        "last frame checked", 
-                        "unlabeled sample"] 
-
 
 def create_cataid( video_path:str, 
                    tfsd:list,
