@@ -425,6 +425,7 @@ def make_contrib_ingest_table( outtable ):
                     # perform conversion to AMS data model structure
                     c = ams_ingests.map_chyron_sec(r)
                     c["tp_time"] = f'{((int(r["tp_time"]))/1000):.3f}'
+                    c["r_tp_time"] = r["tp_time"] # for html table display
                     c["img_data_uri"] = r["img_data_uri"]
                     c["etd_text"] = r["etd_text"]
                     c["asset_id"] = guid
@@ -437,6 +438,7 @@ def make_contrib_ingest_table( outtable ):
                         # perform conversion to AMS data model structure
                         c = ams_ingests.map_contrib_key_val(v, r["tp_time"])
                         c["tp_time"] = f'{((int(r["tp_time"]))/1000):.3f}'
+                        c["r_tp_time"] = r["tp_time"] # for html table display
                         c["img_data_uri"] = r["img_data_uri"]
                         c["etd_text"] = r["etd_text"]
                         c["asset_id"] = guid
@@ -459,7 +461,7 @@ def make_contrib_ingest_table( outtable ):
     for c in rows_data:
         tr = "\n<tr>\n"
         tr += f"<td class='small'>{c['asset_id']}</td>"
-        tr += f"<td>{aapb_html_link(r['asset_id'],r['tp_time'])}</td>"
+        tr += f"<td>{aapb_html_link(r['asset_id'],c['r_tp_time'])}</td>"
         tr += f"<td><img src='{c['img_data_uri']}'></td>"
         tr += f"<td><pre>{c['etd_text']}</pre></td>"
         for f in contrib_fields:
