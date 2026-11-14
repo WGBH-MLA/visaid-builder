@@ -364,9 +364,9 @@ def _parse_key_lines ( lines:list ) -> dict:
     a list of strings with human-readable diagnostic messages.
 
     Note that the functions that are the values in the KEYS dictionary 
-    are called here only for validation of the data values.  Those functions
-    may need to be called downstream again for structuring and outputting 
-    values.
+    are called here only to flag anny problems in the data values.  Those 
+    functions may need to be called downstream again for structuring and 
+    outputting values.
     """
 
     keyed_data = {}
@@ -387,18 +387,17 @@ def _parse_key_lines ( lines:list ) -> dict:
         # (We're just going to check for problems discovered.  We are not using any
         #  transformation peformed by the dispatch function.)
         elif KEYS[k]:
-            ki = KEYS[k](v)
 
-            # record any problems and stop
+            # run key parsing function just to record any problems
+            ki = KEYS[k](v)
             if ki["_problems"]:
                 keyed_data["_problems"] += ki["_problems"]
+
+            # Record this value in the list of values for that key.
+            if k in keyed_data:
+                keyed_data[k].append(v)
             else:
-                # Record values ONLY IF there were no problems.
-                if k in keyed_data:
-                    # Keys are repeatable.  Accumulate a list of values.
-                    keyed_data[k].append(v)
-                else:
-                    keyed_data[k] = [ v ]
+                keyed_data[k] = [ v ]
 
     return keyed_data
 

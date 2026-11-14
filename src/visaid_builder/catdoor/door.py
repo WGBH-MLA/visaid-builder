@@ -225,6 +225,8 @@ def main():
     # Call the primary catout processing function to create a quasi-tabular structure
     # (This is the time-consuming step.)
     catout_table = tablify_catouts( catout_paths, message_level=message_level )
+    
+    #print("DIAG: Finished tablifying catouts.") # DIAG
 
     # Choose the output type
     if args.type == "html-etd":
